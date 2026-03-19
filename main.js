@@ -16,6 +16,9 @@ const pointRadius = 5;
 const hoverRadius = 9;
 const hitRadius = 10;
 
+// current generated link
+let currentLink = null;
+
 function getCurrentSkeleton() {
     return frameSkeletons[currentFrameIndex] || null;
 }
@@ -27,8 +30,20 @@ function ensureCurrentSkeleton() {
     return frameSkeletons[currentFrameIndex];
 }
 
+function drawCurrentLink() {
+    if (!currentLink) return;
+
+    const polygon = currentLink.getXYProjection();
+    drawPolygon(ctx, polygon, 'rgba(255,165,0,0.25)', 'orange', 2);
+
+    polygon.forEach(p => {
+        drawPoint(ctx, p, 4, 'black');
+    });
+}
+
 function redrawAll() {
     clearCanvas(ctx, canvas);
+
     drawSkeleton(
         ctx,
         getCurrentSkeleton(),
@@ -36,12 +51,15 @@ function redrawAll() {
         pointRadius,
         hoverRadius
     );
+
+    drawCurrentLink();
 }
 
 function setCurrentFrame(frameIndex) {
     currentFrameIndex = frameIndex;
     hoveredPoint = null;
     draggedPoint = null;
+    currentLink = null;
     redrawAll();
 }
 
@@ -62,6 +80,26 @@ function getPointAt(x, y) {
     return null;
 }
 
+function createLinkFromFirst4Points(diameter = 20) {
+    const skeleton = getCurrentSkeleton();
+    if (!skeleton || skeleton.points.length < 4) return null;
+
+    const p0 = skeleton.points[0];
+    const p1 = skeleton.points[1];
+    const p2 = skeleton.points[2];
+    const p3 = skeleton.points[3];
+
+    const P0 = { x: p0.x, y: p0.y, z: p0.z ?? 0 };
+    const P1 = { x: p1.x, y: p1.y, z: p1.z ?? 0 };
+    const P2 = { x: p2.x, y: p2.y, z: p2.z ?? 0 };
+    const P3 = { x: p3.x, y: p3.y, z: p3.z ?? 0 };
+
+    currentLink = Link.fromFourPoints(P0, P1, P2, P3, diameter);
+    redrawAll();
+
+    return currentLink;
+}
+
 canvas.addEventListener('click', (e) => {
     if (mode !== 'create') return;
 
@@ -69,7 +107,7 @@ canvas.addEventListener('click', (e) => {
     const x = e.clientX;
     const y = e.clientY;
 
-    const newPoint = skeleton.addPoint(x, y);
+    const newPoint = skeleton.addPoint(x, y, 0);
 
     if (skeleton.points.length > 1) {
         skeleton.addLine(
@@ -78,6 +116,7 @@ canvas.addEventListener('click', (e) => {
         );
     }
 
+    currentLink = null;
     redrawAll();
 });
 
@@ -95,8 +134,9 @@ canvas.addEventListener('mousemove', (e) => {
     if (mode === 'edit' && draggedPoint) {
         const skeleton = getCurrentSkeleton();
         if (skeleton) {
-            skeleton.updatePoint(draggedPoint, mouseX, mouseY);
+            skeleton.updatePoint(draggedPoint, mouseX, mouseY, draggedPoint.z ?? 0);
         }
+        currentLink = null;
     }
 
     redrawAll();
@@ -129,7 +169,11 @@ function cloneSkeleton(sourceSkeleton) {
     const pointMap = new Map();
 
     sourceSkeleton.points.forEach(oldPoint => {
-        const newPoint = newSkeleton.addPoint(oldPoint.x, oldPoint.y);
+        const newPoint = newSkeleton.addPoint(
+            oldPoint.x,
+            oldPoint.y,
+            oldPoint.z ?? 0
+        );
         pointMap.set(oldPoint, newPoint);
     });
 
@@ -153,6 +197,7 @@ function copyPreviousFrameSkeleton() {
 
     hoveredPoint = null;
     draggedPoint = null;
+    currentLink = null;
     redrawAll();
 }
 
@@ -161,6 +206,10 @@ document.addEventListener('keydown', (e) => {
 
     if (key === 'c' && !e.repeat) {
         copyPreviousFrameSkeleton();
+    }
+
+    if (key === 'w' && !e.repeat) {
+        createLinkFromFirst4Points(40);
     }
 });
 
@@ -176,5 +225,6 @@ window.appActions = {
     setCurrentFrame,
     getCurrentSkeleton,
     ensureCurrentSkeleton,
-    redrawAll
+    redrawAll,
+    createLinkFromFirst4Points
 };

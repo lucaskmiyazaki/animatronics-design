@@ -113,6 +113,89 @@ class Link {
         return this.add2D(p1, this.mul2D(d1, t));
     }
 
+    static subtract(a, b) {
+        return {
+            x: a.x - b.x,
+            y: a.y - b.y,
+            z: a.z - b.z
+        };
+    }
+
+    static add(a, b) {
+        return {
+            x: a.x + b.x,
+            y: a.y + b.y,
+            z: a.z + b.z
+        };
+    }
+
+    static multiply(v, s) {
+        return {
+            x: v.x * s,
+            y: v.y * s,
+            z: v.z * s
+        };
+    }
+
+    static magnitude(v) {
+        return Math.sqrt(v.x * v.x + v.y * v.y + v.z * v.z);
+    }
+
+    static normalize(v) {
+        const m = Link.magnitude(v);
+
+        if (m < 1e-8) {
+            return { x: 0, y: 0, z: 0 };
+        }
+
+        return {
+            x: v.x / m,
+            y: v.y / m,
+            z: v.z / m
+        };
+    }
+
+    static fromFourPoints(P0, P1, P2, P3, diameter) {
+        const axis = Link.subtract(P2, P1);
+        const length = Link.magnitude(axis);
+        const axisDir = Link.normalize(axis);
+
+        let normal1;
+        if (P0 == null) {
+            normal1 = axisDir;
+        } else {
+            const d10 = Link.normalize(Link.subtract(P0, P1));
+            const d12 = Link.normalize(Link.subtract(P2, P1));
+            normal1 = Link.normalize(Link.subtract(d10, d12));
+
+            if (Link.magnitude(normal1) < 1e-8) {
+                normal1 = axisDir;
+            }
+        }
+
+        let normal2;
+        if (P3 == null) {
+            normal2 = axisDir;
+        } else {
+            const d21 = Link.normalize(Link.subtract(P1, P2));
+            const d23 = Link.normalize(Link.subtract(P3, P2));
+            normal2 = Link.normalize(Link.subtract(d21, d23));
+
+            if (Link.magnitude(normal2) < 1e-8) {
+                normal2 = axisDir;
+            }
+        }
+
+        console.log(length)
+        console.log(diameter)
+        console.log(normal1)
+        console.log(normal2)
+        const link = new Link(length, diameter, normal1, normal2);
+        link.setPosition(P1.x, P1.y, P1.z);
+
+        return link;
+    }
+
     getXYProjection() {
         const bottom3D = this.getBottomCenter();
         const top3D = this.getTopCenter();
