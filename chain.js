@@ -1,250 +1,188 @@
-class Trapezoid {
-    /**
-     * @param {number} meanLineLength
-     * @param {number} angleLeft - degrees
-     * @param {number} angleRight - degrees
-     * @param {number} thickness
-     */
-    constructor(meanLineLength, angleLeft, angleRight, thickness) {
-        this.meanLineLength = meanLineLength;
-        //angleLeft = angleLeft/2;
-        //angleRight = angleRight/2;
-        this.angleLeft = angleLeft * Math.PI / 360;
-        this.angleRight = angleRight * Math.PI / 360;
-        this.thickness = thickness;
+class Link {
+    constructor(length, diameter, normal1, normal2) {
+        this.length = length;
+        this.diameter = diameter;
+        this.radius = diameter / 2;
 
-        const th2 = thickness / 2;
+        this.position = { x: 0, y: 0, z: 0 };
+        this.rotation = { x: 0, y: 0, z: 0 };
 
-        // Precompute points at position=0, rotation=0
-        this.localPoints = [
-            { x: -th2 / Math.tan(this.angleLeft), y:  th2 },                          // top-left
-            { x: meanLineLength + th2 / Math.tan(this.angleRight), y:  th2 },         // top-right
-            { x: meanLineLength - th2 / Math.tan(this.angleRight), y: -th2 },         // bottom-right
-            { x: th2 / Math.tan(this.angleLeft), y: -th2 }                            // bottom-left
-        ];
+        this.normal1 = normal1;
+        this.normal2 = normal2;
     }
 
-    getPoints(position, rotation) {
-        const rot = rotation * Math.PI / 180;
-        return this.localPoints.map(p => {
-            const x = Math.cos(rot) * p.x - Math.sin(rot) * p.y + position.x;
-            const y = Math.sin(rot) * p.x + Math.cos(rot) * p.y + position.y;
-            return { x, y };
+    setPosition(x, y, z) {
+        this.position = { x, y, z };
+    }
+
+    setRotation(rx, ry, rz) {
+        this.rotation = { x: rx, y: ry, z: rz };
+    }
+
+    rotateVector(v) {
+        let { x, y, z } = v;
+
+        const cx = Math.cos(this.rotation.x);
+        const sx = Math.sin(this.rotation.x);
+        const cy = Math.cos(this.rotation.y);
+        const sy = Math.sin(this.rotation.y);
+        const cz = Math.cos(this.rotation.z);
+        const sz = Math.sin(this.rotation.z);
+
+        // rotate around X
+        let x1 = x;
+        let y1 = y * cx - z * sx;
+        let z1 = y * sx + z * cx;
+
+        // rotate around Y
+        let x2 = x1 * cy + z1 * sy;
+        let y2 = y1;
+        let z2 = -x1 * sy + z1 * cy;
+
+        // rotate around Z
+        let x3 = x2 * cz - y2 * sz;
+        let y3 = x2 * sz + y2 * cz;
+        let z3 = z2;
+
+        return { x: x3, y: y3, z: z3 };
+    }
+
+    getBottomNormal() {
+        return this.rotateVector(this.normal1);
+    }
+
+    getTopNormal() {
+        return this.rotateVector(this.normal2);
+    }
+
+    getBottomCenter() {
+        return {
+            x: this.position.x,
+            y: this.position.y,
+            z: this.position.z
+        };
+    }
+
+    getTopCenter() {
+        const axis = this.rotateVector({ x: 1, y: 0, z: 0 });
+
+        return {
+            x: this.position.x + axis.x * this.length,
+            y: this.position.y + axis.y * this.length,
+            z: this.position.z + axis.z * this.length
+        };
+    }
+
+    // 2D helpers
+    add2D(a, b) {
+        return { x: a.x + b.x, y: a.y + b.y };
+    }
+
+    sub2D(a, b) {
+        return { x: a.x - b.x, y: a.y - b.y };
+    }
+
+    mul2D(v, s) {
+        return { x: v.x * s, y: v.y * s };
+    }
+
+    normalize2D(v) {
+        const m = Math.hypot(v.x, v.y);
+        if (m < 1e-8) return { x: 1, y: 0 };
+        return { x: v.x / m, y: v.y / m };
+    }
+
+    perpendicular2D(v) {
+        return { x: -v.y, y: v.x };
+    }
+
+    cross2D(a, b) {
+        return a.x * b.y - a.y * b.x;
+    }
+
+    intersectLines(p1, d1, p2, d2) {
+        const denom = this.cross2D(d1, d2);
+
+        if (Math.abs(denom) < 1e-8) {
+            return { x: p1.x, y: p1.y };
+        }
+
+        const diff = this.sub2D(p2, p1);
+        const t = this.cross2D(diff, d2) / denom;
+
+        return this.add2D(p1, this.mul2D(d1, t));
+    }
+
+    getXYProjection() {
+        const bottom3D = this.getBottomCenter();
+        const top3D = this.getTopCenter();
+
+        const bottomCenter = { x: bottom3D.x, y: bottom3D.y };
+        const topCenter = { x: top3D.x, y: top3D.y };
+
+        const axis2D = this.sub2D(topCenter, bottomCenter);
+        const axisDir = this.normalize2D(axis2D);
+        const offsetDir = this.perpendicular2D(axisDir);
+
+        const halfThickness = this.diameter / 2;
+
+        const bottomNormal2D = this.normalize2D({
+            x: this.getBottomNormal().x,
+            y: this.getBottomNormal().y
         });
-    }
 
-    getLeftExcess() {
-        const midX = (this.localPoints[0].x + this.localPoints[3].x) / 2;
-        const leftExcess = Math.max(
-            Math.abs(this.localPoints[0].x - midX), // top-left
-            Math.abs(this.localPoints[3].x - midX)  // bottom-left
+        const topNormal2D = this.normalize2D({
+            x: this.getTopNormal().x,
+            y: this.getTopNormal().y
+        });
+
+        // side lines are perpendicular to normals
+        const bottomSideDir = this.perpendicular2D(bottomNormal2D);
+        const topSideDir = this.perpendicular2D(topNormal2D);
+
+        // upper and lower rails
+        const upperRailPoint = this.add2D(
+            bottomCenter,
+            this.mul2D(offsetDir, halfThickness)
         );
-        return leftExcess;
-    }
 
-    getRightExcess() {
-        const midX = (this.localPoints[1].x + this.localPoints[2].x) / 2;
-        const rightExcess = Math.max(
-            Math.abs(this.localPoints[1].x - midX), // top-right
-            Math.abs(this.localPoints[2].x - midX)  // bottom-right
+        const lowerRailPoint = this.add2D(
+            bottomCenter,
+            this.mul2D(offsetDir, -halfThickness)
         );
-        return rightExcess;
+
+        const upperRailDir = axisDir;
+        const lowerRailDir = axisDir;
+
+        // 4 intersections
+        const p1 = this.intersectLines(
+            bottomCenter,
+            bottomSideDir,
+            upperRailPoint,
+            upperRailDir
+        );
+
+        const p2 = this.intersectLines(
+            topCenter,
+            topSideDir,
+            upperRailPoint,
+            upperRailDir
+        );
+
+        const p3 = this.intersectLines(
+            topCenter,
+            topSideDir,
+            lowerRailPoint,
+            lowerRailDir
+        );
+
+        const p4 = this.intersectLines(
+            bottomCenter,
+            bottomSideDir,
+            lowerRailPoint,
+            lowerRailDir
+        );
+
+        return [p1, p2, p3, p4];
     }
-}
-
-class Chain {
-
-    constructor() {
-        this.trapezoids = [];
-    }
-
-    clear() {
-        this.trapezoids = [];
-    }
-
-    buildFromSkeleton(skeleton, thickness, startX = 0, baseY = 0) {
-
-        this.clear();
-
-        let prev = null;
-
-        skeleton.lines.forEach(line => {
-
-            const meanLength = Math.hypot(
-                line.end.x - line.start.x,
-                line.end.y - line.start.y
-            );
-
-            const trap = new Trapezoid(
-                meanLength,
-                line.start.angle,
-                line.end.angle,
-                thickness
-            );
-
-            // Compute flat X position immediately
-            let flatX;
-
-            if (!prev) {
-                flatX = startX;
-            }
-            else {
-                flatX =
-                    prev.flatPosition.x +
-                    prev.trapezoid.meanLineLength +
-                    prev.trapezoid.getRightExcess() +
-                    trap.getLeftExcess();
-            }
-
-            const item = {
-
-                trapezoid: trap,
-                skeletonLine: line,
-
-                // flat state (computed immediately)
-                flatPosition: { x: flatX, y: baseY },
-                flatRotation: 0,
-
-                // final state
-                finalPosition: {
-                    x: line.start.x,
-                    y: line.start.y
-                },
-
-                finalRotation: line.angle,
-
-                // current state initialized as flat
-                position: { x: flatX, y: baseY },
-                rotation: 0
-
-            };
-
-            this.trapezoids.push(item);
-
-            prev = item;
-
-        });
-    }
-
-
-    applyFinalLayout() {
-
-        this.trapezoids.forEach(item => {
-
-            item.position.x = item.finalPosition.x;
-            item.position.y = item.finalPosition.y;
-            item.rotation = item.finalRotation;
-
-        });
-
-    }
-
-
-    shortestAngleDifference(from, to) {
-        let diff = to - from;
-        diff = ((diff + 180) % 360 + 360) % 360 - 180;
-        return diff;
-    }
-
-    incrementTowardsFinal(fraction) {
-
-        this.trapezoids.forEach(item => {
-
-            const dx =
-                item.finalPosition.x -
-                item.flatPosition.x;
-
-            const dy =
-                item.finalPosition.y -
-                item.flatPosition.y;
-
-            const dr =
-            this.shortestAngleDifference(
-                item.flatRotation,
-                item.finalRotation
-            );
-
-            item.position.x += dx * fraction;
-            item.position.y += dy * fraction;
-
-            console.log(dr)
-            item.rotation += dr * fraction;
-
-        });
-
-    }
-
-
-    resetToFlat() {
-
-        this.trapezoids.forEach(item => {
-
-            item.position.x = item.flatPosition.x;
-            item.position.y = item.flatPosition.y;
-            item.rotation = item.flatRotation;
-
-        });
-
-    }
-
-
-    getTrapezoids() {
-        return this.trapezoids;
-    }
-
-    exportFlatDXF(filename = "chain_flat.dxf") {
-
-        const trapezoids = this.trapezoids;
-        if (trapezoids.length === 0) return;
-        let dxf = "";
-
-        // DXF HEADER
-        dxf += "0\nSECTION\n2\nHEADER\n0\nENDSEC\n";
-
-        // ENTITIES SECTION
-        dxf += "0\nSECTION\n2\nENTITIES\n";
-
-        trapezoids.forEach(item => {
-
-            const pts = item.trapezoid.getPoints(
-                item.flatPosition,
-                item.flatRotation
-            );
-
-            // Draw 4 lines per trapezoid
-            for (let i = 0; i < 4; i++) {
-
-                const p1 = pts[i];
-                const p2 = pts[(i + 1) % 4];
-
-                dxf += "0\nLINE\n";
-                dxf += "8\n0\n"; // layer
-
-                dxf += "10\n" + p1.x + "\n";
-                dxf += "20\n" + (-p1.y) + "\n"; // invert Y for CAD
-                dxf += "30\n0\n";
-
-                dxf += "11\n" + p2.x + "\n";
-                dxf += "21\n" + (-p2.y) + "\n";
-                dxf += "31\n0\n";
-
-            }
-
-        });
-
-        // END ENTITIES
-        dxf += "0\nENDSEC\n0\nEOF";
-
-        // Download
-        const blob = new Blob([dxf], { type: "application/dxf" });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = filename;
-        a.click();
-
-        URL.revokeObjectURL(url);
-
-    }
-
 }
