@@ -155,17 +155,74 @@ class Link {
         };
     }
 
+    // ADDED: compute the rotation that aligns P1P2 with local +X
+    static rotationFromXAxis(axis) {
+        const d = Link.normalize(axis);
+
+        const rz = Math.atan2(d.y, d.x);
+        const xyLen = Math.sqrt(d.x * d.x + d.y * d.y);
+        const ry = Math.atan2(-d.z, xyLen);
+
+        return { x: 0, y: ry, z: rz };
+    }
+
+    // ADDED: inverse-rotate a vector by a given rotation
+    static inverseRotateVectorWithRotation(v, rotation) {
+        let { x, y, z } = v;
+
+        const cz = Math.cos(-rotation.z);
+        const sz = Math.sin(-rotation.z);
+        const cy = Math.cos(-rotation.y);
+        const sy = Math.sin(-rotation.y);
+        const cx = Math.cos(-rotation.x);
+        const sx = Math.sin(-rotation.x);
+
+        // undo Z
+        let x1 = x * cz - y * sz;
+        let y1 = x * sz + y * cz;
+        let z1 = z;
+
+        // undo Y
+        let x2 = x1 * cy + z1 * sy;
+        let y2 = y1;
+        let z2 = -x1 * sy + z1 * cy;
+
+        // undo X
+        let x3 = x2;
+        let y3 = y2 * cx - z2 * sx;
+        let z3 = y2 * sx + z2 * cx;
+
+        return { x: x3, y: y3, z: z3 };
+    }
+
     static fromFourPoints(P0, P1, P2, P3, diameter) {
         const axis = Link.subtract(P2, P1);
         const length = Link.magnitude(axis);
         const axisDir = Link.normalize(axis);
 
+        // ADDED: compute and store rotation first
+        const rotation = Link.rotationFromXAxis(axis);
+
         let normal1;
         if (P0 == null) {
             normal1 = axisDir;
         } else {
-            const d10 = Link.normalize(Link.subtract(P0, P1));
-            const d12 = Link.normalize(Link.subtract(P2, P1));
+            // ADDED: rotate input vectors into the horizontal frame first
+            const d10 = Link.normalize(
+                Link.inverseRotateVectorWithRotation(
+                    Link.subtract(P0, P1),
+                    rotation
+                )
+            );
+
+            const d12 = Link.normalize(
+                Link.inverseRotateVectorWithRotation(
+                    Link.subtract(P2, P1),
+                    rotation
+                )
+            );
+
+            // existing logic preserved
             normal1 = Link.normalize(Link.subtract(d10, d12));
 
             if (Link.magnitude(normal1) < 1e-8) {
@@ -177,8 +234,22 @@ class Link {
         if (P3 == null) {
             normal2 = axisDir;
         } else {
-            const d21 = Link.normalize(Link.subtract(P1, P2));
-            const d23 = Link.normalize(Link.subtract(P3, P2));
+            // ADDED: rotate input vectors into the horizontal frame first
+            const d21 = Link.normalize(
+                Link.inverseRotateVectorWithRotation(
+                    Link.subtract(P1, P2),
+                    rotation
+                )
+            );
+
+            const d23 = Link.normalize(
+                Link.inverseRotateVectorWithRotation(
+                    Link.subtract(P3, P2),
+                    rotation
+                )
+            );
+
+            // existing logic preserved
             normal2 = Link.normalize(Link.subtract(d21, d23));
 
             if (Link.magnitude(normal2) < 1e-8) {
@@ -186,12 +257,11 @@ class Link {
             }
         }
 
-        console.log(length)
-        console.log(diameter)
-        console.log(normal1)
-        console.log(normal2)
         const link = new Link(length, diameter, normal1, normal2);
         link.setPosition(P1.x, P1.y, P1.z);
+
+        // ADDED: save that rotation on the object
+        link.setRotation(rotation.x, rotation.y, rotation.z);
 
         return link;
     }
