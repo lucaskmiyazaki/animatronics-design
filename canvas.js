@@ -133,22 +133,55 @@ function animateTowardsFinal(duration = 1000) {
     });
 }
 
+function playPreviewAnimation() {
+    if (isAnimating) return;
+    if (chain.getTrapezoids().length === 0) return;
+
+    isAnimating = true;
+
+    chain.resetToFlat();
+    redrawAll();
+
+    animateTowardsFinal(1000)
+        .then(() => new Promise(resolve => setTimeout(resolve, 1000)))
+        .then(() => {
+            chain.resetToFlat();
+            redrawAll();
+            isAnimating = false;
+        });
+}
+
+function exportDXF() {
+    chain.exportFlatDXF();
+}
+
+function buildChain() {
+    if (skeleton.points.length === 0) return;
+
+    drawingFinished = true;
+
+    chain.buildFromSkeleton(
+        skeleton,
+        trapezoidThickness,
+        skeleton.points[0].x,
+        skeleton.points[0].y
+    );
+
+    redrawAll();
+}
+
+// expose functions so sidebar.js can call them
+window.appActions = {
+    playPreviewAnimation,
+    exportDXF,
+    buildChain
+};
+
 document.addEventListener('keydown', (e) => {
     const key = e.key.toLowerCase();
 
     if (e.key === 'Enter') {
-        if (skeleton.points.length === 0) return;
-
-        drawingFinished = true;
-
-        chain.buildFromSkeleton(
-            skeleton,
-            trapezoidThickness,
-            skeleton.points[0].x,
-            skeleton.points[0].y
-        );
-
-        redrawAll();
+        buildChain();
     }
 
     if (key === 'q') {
@@ -158,20 +191,7 @@ document.addEventListener('keydown', (e) => {
     }
 
     if (key === 'w' && !e.repeat) {
-        if (isAnimating) return;
-
-        isAnimating = true;
-
-        chain.resetToFlat();
-        redrawAll();
-
-        animateTowardsFinal(1000)
-            .then(() => new Promise(resolve => setTimeout(resolve, 1000))) // wait 2s
-            .then(() => {
-                chain.resetToFlat();
-                redrawAll();
-                isAnimating = false;
-            });
+        playPreviewAnimation();
     }
 
     if (key === 'e') {
@@ -181,6 +201,6 @@ document.addEventListener('keydown', (e) => {
     }
 
     if (key === 'd' && !e.repeat) {
-        chain.exportFlatDXF();
+        exportDXF();
     }
 });
