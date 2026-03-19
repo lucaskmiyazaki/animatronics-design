@@ -10,7 +10,25 @@ function createButton(label, onClick) {
     return btn;
 }
 
-// Create buttons
+// MODE TOGGLE BUTTON
+const modeButton = document.createElement('button');
+
+function updateModeButton() {
+    const mode = window.appActions?.getMode?.() || 'create';
+    modeButton.textContent = mode === 'create'
+        ? 'Mode: Create'
+        : 'Mode: Edit';
+}
+
+modeButton.addEventListener('click', () => {
+    window.appActions?.toggleMode?.();
+    updateModeButton();
+});
+
+// Initialize label
+updateModeButton();
+
+// Create other buttons
 const buildButton = createButton('Build Chain', () => {
     window.appActions?.buildChain();
 });
@@ -24,7 +42,7 @@ const exportButton = createButton('Export DXF', () => {
 });
 
 // Add buttons to sidebar
-sidebar.append(buildButton, previewButton, exportButton);
+sidebar.append(modeButton, buildButton, previewButton, exportButton);
 
 // Add sidebar to page
 document.body.appendChild(sidebar);

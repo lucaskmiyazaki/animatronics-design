@@ -9,12 +9,32 @@ const chain = new Chain();
 
 let drawingFinished = false;
 let isAnimating = false;
+let hoveredPoint = null;
+let draggedPoint = null;
+let mode = 'create'; // 'create' or 'edit'
 
 // Default trapezoid thickness
 const trapezoidThickness = 50;
+const pointRadius = 5;
+const hoverRadius = 9;
+const hitRadius = 10;
+
+function getPointAt(x, y) {
+    for (const point of skeleton.points) {
+        const dx = x - point.x;
+        const dy = y - point.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+
+        if (dist <= hitRadius) {
+            return point;
+        }
+    }
+    return null;
+}
 
 canvas.addEventListener('click', (e) => {
     if (drawingFinished) return;
+    if (mode !== 'create') return;
 
     const x = e.clientX;
     const y = e.clientY;
@@ -29,6 +49,40 @@ canvas.addEventListener('click', (e) => {
     }
 
     draw();
+});
+
+canvas.addEventListener('mousedown', (e) => {
+    if (drawingFinished) return;
+    if (mode !== 'edit') return;
+
+    const x = e.clientX;
+    const y = e.clientY;
+
+    draggedPoint = getPointAt(x, y);
+});
+
+canvas.addEventListener('mousemove', (e) => {
+    const mouseX = e.clientX;
+    const mouseY = e.clientY;
+
+    hoveredPoint = getPointAt(mouseX, mouseY);
+
+    if (mode === 'edit' && draggedPoint) {
+        draggedPoint.x = mouseX;
+        draggedPoint.y = mouseY;
+    }
+
+    redrawAll();
+});
+
+canvas.addEventListener('mouseup', () => {
+    draggedPoint = null;
+});
+
+canvas.addEventListener('mouseleave', () => {
+    hoveredPoint = null;
+    draggedPoint = null;
+    redrawAll();
 });
 
 function drawChain(chain) {
@@ -65,11 +119,12 @@ function draw() {
         ctx.stroke();
     });
 
-    ctx.fillStyle = 'red';
-
     skeleton.points.forEach(point => {
+        const radius = point === hoveredPoint ? hoverRadius : pointRadius;
+
         ctx.beginPath();
-        ctx.arc(point.x, point.y, 5, 0, Math.PI * 2);
+        ctx.fillStyle = 'red';
+        ctx.arc(point.x, point.y, radius, 0, Math.PI * 2);
         ctx.fill();
     });
 }
@@ -170,37 +225,20 @@ function buildChain() {
     redrawAll();
 }
 
-// expose functions so sidebar.js can call them
+function toggleMode() {
+    mode = mode === 'create' ? 'edit' : 'create';
+    draggedPoint = null;
+    return mode;
+}
+
+function getMode() {
+    return mode;
+}
+
 window.appActions = {
     playPreviewAnimation,
     exportDXF,
-    buildChain
+    buildChain,
+    toggleMode,
+    getMode
 };
-
-document.addEventListener('keydown', (e) => {
-    const key = e.key.toLowerCase();
-
-    if (e.key === 'Enter') {
-        buildChain();
-    }
-
-    if (key === 'q') {
-        if (isAnimating) return;
-        chain.resetToFlat();
-        redrawAll();
-    }
-
-    if (key === 'w' && !e.repeat) {
-        playPreviewAnimation();
-    }
-
-    if (key === 'e') {
-        if (isAnimating) return;
-        chain.applyFinalLayout();
-        redrawAll();
-    }
-
-    if (key === 'd' && !e.repeat) {
-        exportDXF();
-    }
-});
