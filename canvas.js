@@ -44,35 +44,6 @@ function drawChain(chain) {
 document.addEventListener('keydown', (e) => {
 
     const key = e.key.toLowerCase();
-
-    // ENTER → build chain (initialize at flat)
-    if (e.key === 'Enter') {
-
-        drawingFinished = true;
-
-        chain.buildFromSkeleton(
-            skeleton,
-            trapezoidThickness,
-            skeleton.points[0].x,
-            skeleton.points[0].y
-        );
-
-        draw();
-        drawChain(chain);
-    }
-
-
-    // Q → reset to flat
-    if (key === 'q') {
-
-        chain.resetToFlat();
-
-        draw();
-        drawChain(chain);
-    }
-
-
-    // W → increment towards final
     if (key === 'w') {
 
         chain.incrementTowardsFinal(0.01);
@@ -81,8 +52,6 @@ document.addEventListener('keydown', (e) => {
         drawChain(chain);
     }
 
-
-    // E → go directly to final
     if (key === 'e') {
 
         chain.applyFinalLayout();
@@ -90,8 +59,6 @@ document.addEventListener('keydown', (e) => {
         draw();
         drawChain(chain);
     }
-
-    document.addEventListener('keydown', (e) => {
 
     if (e.key === 'Enter') {
 
@@ -116,18 +83,9 @@ document.addEventListener('keydown', (e) => {
         drawChain(chain);
     }
 
-    if (e.key.toLowerCase() === 'a') {
-
-        chain.incrementTowardsFinal(0.02);
-
-        draw();
-        drawChain(chain);
-    }
-
     if (e.key.toLowerCase() === 'd') {
             chain.exportFlatDXF();
-        }
-    });
+    }
 
 });
 
