@@ -68,8 +68,7 @@ canvas.addEventListener('mousemove', (e) => {
     hoveredPoint = getPointAt(mouseX, mouseY);
 
     if (mode === 'edit' && draggedPoint) {
-        draggedPoint.x = mouseX;
-        draggedPoint.y = mouseY;
+        skeleton.updatePoint(draggedPoint, mouseX, mouseY);
     }
 
     redrawAll();
@@ -214,7 +213,7 @@ function buildChain() {
     if (skeleton.points.length === 0) return;
 
     drawingFinished = true;
-
+    console.log(skeleton)
     chain.buildFromSkeleton(
         skeleton,
         trapezoidThickness,

@@ -1,24 +1,29 @@
-// skeleton.js
 class Point {
     constructor(x, y) {
         this.x = x;
         this.y = y;
         this.lines = [];
-        this.angle = 180; // default
+        this.angle = 180;
     }
 
     updateAngle() {
-        if (this.lines.length === 1) {
+        if (this.lines.length === 0) {
+            this.angle = 0;
+        } else if (this.lines.length === 1) {
             this.angle = 180;
         } else if (this.lines.length === 2) {
             const [l1, l2] = this.lines;
-            const v1 = { x: l1.getOtherPoint(this).x - this.x, y: l1.getOtherPoint(this).y - this.y };
-            const v2 = { x: l2.getOtherPoint(this).x - this.x, y: l2.getOtherPoint(this).y - this.y };
+
+            const p1 = l1.getOtherPoint(this);
+            const p2 = l2.getOtherPoint(this);
+
+            const v1 = { x: p1.x - this.x, y: p1.y - this.y };
+            const v2 = { x: p2.x - this.x, y: p2.y - this.y };
+
             const angle1 = Math.atan2(v1.y, v1.x);
             const angle2 = Math.atan2(v2.y, v2.x);
-            let deg = (angle2 - angle1) * (180 / Math.PI);
 
-            // Normalize to [0, 360)
+            let deg = (angle2 - angle1) * (180 / Math.PI);
             deg = ((deg % 360) + 360) % 360;
 
             this.angle = deg;
@@ -31,6 +36,7 @@ class Line {
         this.start = startPoint;
         this.end = endPoint;
         this.angle = this.computeAngle();
+
         this.start.lines.push(this);
         this.end.lines.push(this);
     }
@@ -42,9 +48,8 @@ class Line {
     computeAngle() {
         const dx = this.end.x - this.start.x;
         const dy = this.end.y - this.start.y;
-        let deg = Math.atan2(dy, dx) * (180 / Math.PI);
 
-        // Normalize to [0, 360)
+        let deg = Math.atan2(dy, dx) * (180 / Math.PI);
         deg = ((deg % 360) + 360) % 360;
 
         return deg;
@@ -70,13 +75,39 @@ class Skeleton {
     addLine(p1, p2) {
         const l = new Line(p1, p2);
         this.lines.push(l);
+
         p1.updateAngle();
         p2.updateAngle();
+
         return l;
     }
 
     updateAngles() {
         this.lines.forEach(l => l.updateAngle());
         this.points.forEach(p => p.updateAngle());
+    }
+
+    updatePoint(point, x, y) {
+        point.x = x;
+        point.y = y;
+
+        // update connected lines
+        point.lines.forEach(line => {
+            line.updateAngle();
+        });
+
+        // update this point angle
+        point.updateAngle();
+
+        // update neighbor point angles
+        point.lines.forEach(line => {
+            const neighbor = line.getOtherPoint(point);
+            neighbor.updateAngle();
+        });
+    }
+
+    updateAllGeometry() {
+        this.lines.forEach(line => line.updateAngle());
+        this.points.forEach(point => point.updateAngle());
     }
 }
