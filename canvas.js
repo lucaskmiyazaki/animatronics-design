@@ -271,6 +271,48 @@ function getMode() {
     return mode;
 }
 
+function cloneSkeleton(sourceSkeleton) {
+    if (!sourceSkeleton) return null;
+
+    const newSkeleton = new Skeleton();
+    const pointMap = new Map();
+
+    sourceSkeleton.points.forEach(oldPoint => {
+        const newPoint = newSkeleton.addPoint(oldPoint.x, oldPoint.y);
+        pointMap.set(oldPoint, newPoint);
+    });
+
+    sourceSkeleton.lines.forEach(oldLine => {
+        const newStart = pointMap.get(oldLine.start);
+        const newEnd = pointMap.get(oldLine.end);
+        newSkeleton.addLine(newStart, newEnd);
+    });
+
+    newSkeleton.updateAllGeometry();
+    return newSkeleton;
+}
+
+function copyPreviousFrameSkeleton() {
+    if (currentFrameIndex <= 0) return;
+
+    const previousSkeleton = frameSkeletons[currentFrameIndex - 1];
+    if (!previousSkeleton) return;
+
+    frameSkeletons[currentFrameIndex] = cloneSkeleton(previousSkeleton);
+
+    hoveredPoint = null;
+    draggedPoint = null;
+    redrawAll();
+}
+
+document.addEventListener('keydown', (e) => {
+    const key = e.key.toLowerCase();
+
+    if (key === 'c' && !e.repeat) {
+        copyPreviousFrameSkeleton();
+    }
+});
+
 window.appActions = {
     playPreviewAnimation,
     exportDXF,
