@@ -28,7 +28,6 @@ modeButton.addEventListener('click', () => {
 // Initialize label
 updateModeButton();
 
-// Create other buttons
 const buildButton = createButton('Build Chain', () => {
     window.appActions?.buildChain();
 });
@@ -41,8 +40,28 @@ const exportButton = createButton('Export DXF', () => {
     window.appActions?.exportDXF();
 });
 
+const uploadVideoButton = createButton('Upload Video', () => {
+    window.videoControls?.openVideoPicker();
+});
+
+const prevFrameButton = createButton('Prev Frame', () => {
+    window.videoControls?.prevFrame();
+});
+
+const nextFrameButton = createButton('Next Frame', () => {
+    window.videoControls?.nextFrame();
+});
+
 // Add buttons to sidebar
-sidebar.append(modeButton, buildButton, previewButton, exportButton);
+sidebar.append(
+    modeButton,
+    buildButton,
+    previewButton,
+    exportButton,
+    uploadVideoButton,
+    prevFrameButton,
+    nextFrameButton
+);
 
 // Add sidebar to page
 document.body.appendChild(sidebar);
