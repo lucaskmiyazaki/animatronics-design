@@ -4,8 +4,12 @@ const ctx = canvas.getContext('2d');
 canvas.width = window.innerWidth;
 canvas.height = window.innerHeight;
 
-const skeleton = new Skeleton();
+// one chain for now
 const chain = new Chain();
+
+// one skeleton per frame
+const frameSkeletons = {};
+let currentFrameIndex = 0;
 
 let drawingFinished = false;
 let isAnimating = false;
@@ -19,7 +23,28 @@ const pointRadius = 5;
 const hoverRadius = 9;
 const hitRadius = 10;
 
+function getCurrentSkeleton() {
+    return frameSkeletons[currentFrameIndex] || null;
+}
+
+function ensureCurrentSkeleton() {
+    if (!frameSkeletons[currentFrameIndex]) {
+        frameSkeletons[currentFrameIndex] = new Skeleton();
+    }
+    return frameSkeletons[currentFrameIndex];
+}
+
+function setCurrentFrame(frameIndex) {
+    currentFrameIndex = frameIndex;
+    hoveredPoint = null;
+    draggedPoint = null;
+    redrawAll();
+}
+
 function getPointAt(x, y) {
+    const skeleton = getCurrentSkeleton();
+    if (!skeleton) return null;
+
     for (const point of skeleton.points) {
         const dx = x - point.x;
         const dy = y - point.y;
@@ -35,6 +60,8 @@ function getPointAt(x, y) {
 canvas.addEventListener('click', (e) => {
     if (drawingFinished) return;
     if (mode !== 'create') return;
+
+    const skeleton = ensureCurrentSkeleton();
 
     const x = e.clientX;
     const y = e.clientY;
@@ -68,7 +95,10 @@ canvas.addEventListener('mousemove', (e) => {
     hoveredPoint = getPointAt(mouseX, mouseY);
 
     if (mode === 'edit' && draggedPoint) {
-        skeleton.updatePoint(draggedPoint, mouseX, mouseY);
+        const skeleton = getCurrentSkeleton();
+        if (skeleton) {
+            skeleton.updatePoint(draggedPoint, mouseX, mouseY);
+        }
     }
 
     redrawAll();
@@ -107,6 +137,9 @@ function drawChain(chain) {
 
 function draw() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    const skeleton = getCurrentSkeleton();
+    if (!skeleton) return;
 
     ctx.strokeStyle = 'blue';
     ctx.lineWidth = 2;
@@ -210,10 +243,14 @@ function exportDXF() {
 }
 
 function buildChain() {
-    if (skeleton.points.length === 0) return;
+    const skeleton = getCurrentSkeleton();
+    if (!skeleton || skeleton.points.length === 0) return;
 
     drawingFinished = true;
-    console.log(skeleton)
+
+    skeleton.updateAllGeometry();
+    console.log(skeleton);
+
     chain.buildFromSkeleton(
         skeleton,
         trapezoidThickness,
@@ -239,5 +276,6 @@ window.appActions = {
     exportDXF,
     buildChain,
     toggleMode,
-    getMode
+    getMode,
+    setCurrentFrame
 };

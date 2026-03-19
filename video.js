@@ -47,6 +47,11 @@
     document.body.prepend(video);
 
     let currentVideoURL = null;
+    let currentFrameIndex = 0;
+
+    function syncCanvasFrame() {
+        window.appActions?.setCurrentFrame?.(currentFrameIndex);
+    }
 
     function openVideoPicker() {
         fileInput.value = '';
@@ -68,8 +73,10 @@
             'loadeddata',
             async () => {
                 try {
-                    await video.pause();
+                    video.pause();
+                    currentFrameIndex = 0;
                     video.currentTime = 0;
+                    syncCanvasFrame();
                 } catch (err) {
                     console.error('Could not initialize video:', err);
                 }
@@ -85,20 +92,41 @@
         return Math.min(Math.max(0, t), video.duration);
     }
 
+    function clampFrameIndex(frameIndex) {
+        if (!isFinite(video.duration) || isNaN(video.duration)) {
+            return Math.max(0, frameIndex);
+        }
+
+        const maxFrame = Math.floor(video.duration / FRAME_STEP);
+        return Math.min(Math.max(0, frameIndex), maxFrame);
+    }
+
+    function showFrameIndex(frameIndex) {
+        if (!video.src) return;
+
+        currentFrameIndex = clampFrameIndex(frameIndex);
+        video.pause();
+        video.currentTime = clampTime(currentFrameIndex * FRAME_STEP);
+        syncCanvasFrame();
+    }
+
     function showFrameAt(time) {
         if (!video.src) return;
+
         video.pause();
         video.currentTime = clampTime(time);
+        currentFrameIndex = Math.round(video.currentTime / FRAME_STEP);
+        syncCanvasFrame();
     }
 
     function nextFrame() {
         if (!video.src) return;
-        showFrameAt(video.currentTime + FRAME_STEP);
+        showFrameIndex(currentFrameIndex + 1);
     }
 
     function prevFrame() {
         if (!video.src) return;
-        showFrameAt(video.currentTime - FRAME_STEP);
+        showFrameIndex(currentFrameIndex - 1);
     }
 
     fileInput.addEventListener('change', (e) => {
@@ -106,15 +134,14 @@
         loadVideoFile(file);
     });
 
-   
-
-    // optional global access
     window.videoControls = {
         openVideoPicker,
         loadVideoFile,
         nextFrame,
         prevFrame,
         showFrameAt,
+        showFrameIndex,
+        getCurrentFrameIndex: () => currentFrameIndex,
         video
     };
 })();
