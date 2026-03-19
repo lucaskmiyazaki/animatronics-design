@@ -29,7 +29,7 @@ modeButton.addEventListener('click', () => {
 updateModeButton();
 
 const buildButton = createButton('Build Chain', () => {
-    window.appActions?.buildChain();
+    window.appActions?.createChainFromSkeleton(40);
 });
 
 const previewButton = createButton('Preview', () => {
@@ -52,6 +52,10 @@ const nextFrameButton = createButton('Next Frame', () => {
     window.videoControls?.nextFrame();
 });
 
+const CopyButton = createButton('Copy Prev', () => {
+    window.appActions?.copyPreviousFrameSkeleton();
+});
+
 // Add buttons to sidebar
 sidebar.append(
     modeButton,
@@ -60,7 +64,8 @@ sidebar.append(
     exportButton,
     uploadVideoButton,
     prevFrameButton,
-    nextFrameButton
+    nextFrameButton,
+    CopyButton
 );
 
 // Add sidebar to page

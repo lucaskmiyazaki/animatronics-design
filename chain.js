@@ -198,71 +198,68 @@ class Link {
     static fromFourPoints(P0, P1, P2, P3, diameter) {
         const axis = Link.subtract(P2, P1);
         const length = Link.magnitude(axis);
-        const axisDir = Link.normalize(axis);
-
-        // ADDED: compute and store rotation first
+        
+        if (length < 1e-8) {
+            return null;
+        }
+    
         const rotation = Link.rotationFromXAxis(axis);
-
+        const localAxis = { x: 1, y: 0, z: 0 };
+    
         let normal1;
         if (P0 == null) {
-            normal1 = axisDir;
+            normal1 = localAxis;
         } else {
-            // ADDED: rotate input vectors into the horizontal frame first
             const d10 = Link.normalize(
                 Link.inverseRotateVectorWithRotation(
                     Link.subtract(P0, P1),
                     rotation
                 )
             );
-
+        
             const d12 = Link.normalize(
                 Link.inverseRotateVectorWithRotation(
                     Link.subtract(P2, P1),
                     rotation
                 )
             );
-
-            // existing logic preserved
+        
             normal1 = Link.normalize(Link.subtract(d10, d12));
-
+        
             if (Link.magnitude(normal1) < 1e-8) {
-                normal1 = axisDir;
+                normal1 = localAxis;
             }
         }
-
+    
         let normal2;
         if (P3 == null) {
-            normal2 = axisDir;
+            normal2 = localAxis;
         } else {
-            // ADDED: rotate input vectors into the horizontal frame first
             const d21 = Link.normalize(
                 Link.inverseRotateVectorWithRotation(
                     Link.subtract(P1, P2),
                     rotation
                 )
             );
-
+        
             const d23 = Link.normalize(
                 Link.inverseRotateVectorWithRotation(
                     Link.subtract(P3, P2),
                     rotation
                 )
             );
-
-            // existing logic preserved
+        
             normal2 = Link.normalize(Link.subtract(d21, d23));
-
+        
             if (Link.magnitude(normal2) < 1e-8) {
-                normal2 = axisDir;
+                normal2 = localAxis;
             }
         }
-
+    
         const link = new Link(length, diameter, normal1, normal2);
         link.setPosition(P1.x, P1.y, P1.z);
-
-        // ADDED: save that rotation on the object
         link.setRotation(rotation.x, rotation.y, rotation.z);
-
+    
         return link;
     }
 
@@ -337,5 +334,52 @@ class Link {
         );
 
         return [p1, p2, p3, p4];
+    }
+}
+
+class Chain {
+    constructor() {
+        this.links = [];
+    }
+
+    clear() {
+        this.links = [];
+    }
+
+    getLinks() {
+        return this.links;
+    }
+
+    static pointTo3D(point) {
+        return {
+            x: point.x,
+            y: point.y,
+            z: point.z ?? 0
+        };
+    }
+
+    buildFromSkeleton(skeleton, diameter = 20) {
+        this.clear();
+
+        if (!skeleton || skeleton.points.length < 2) {
+            return this.links;
+        }
+
+        const pts = skeleton.points;
+
+        for (let i = 0; i < pts.length - 1; i++) {
+            const P0 = i > 0 ? Chain.pointTo3D(pts[i - 1]) : null;
+            const P1 = Chain.pointTo3D(pts[i]);
+            const P2 = Chain.pointTo3D(pts[i + 1]);
+            const P3 = i + 2 < pts.length ? Chain.pointTo3D(pts[i + 2]) : null;
+
+            const link = Link.fromFourPoints(P0, P1, P2, P3, diameter);
+
+            if (link) {
+                this.links.push(link);
+            }
+        }
+
+        return this.links;
     }
 }
