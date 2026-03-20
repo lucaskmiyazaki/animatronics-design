@@ -56,6 +56,10 @@ const CopyButton = createButton('Copy Prev', () => {
     window.appActions?.copyPreviousFrameSkeleton();
 });
 
+const renderSkeletonButton = createButton('Render Skeleton', () => {
+    window.appActions?.drawSkeleton3D();
+});
+
 // Add buttons to sidebar
 sidebar.append(
     modeButton,
@@ -65,7 +69,8 @@ sidebar.append(
     uploadVideoButton,
     prevFrameButton,
     nextFrameButton,
-    CopyButton
+    CopyButton,
+    renderSkeletonButton
 );
 
 // Add sidebar to page
