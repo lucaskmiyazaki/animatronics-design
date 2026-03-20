@@ -2,8 +2,15 @@
 
 (function () {
     const canvas = document.getElementById('canvas');
+    const canvasContainer = document.getElementById('canvas-container');
+
     if (!canvas) {
         console.error('Canvas with id="canvas" not found.');
+        return;
+    }
+
+    if (!canvasContainer) {
+        console.error('Container with id="canvas-container" not found.');
         return;
     }
 
@@ -18,7 +25,13 @@
     fileInput.style.display = 'none';
     document.body.appendChild(fileInput);
 
-    // ----- video behind canvas -----
+    // ----- ensure canvas container can hold layered content -----
+    if (!canvasContainer.style.position) {
+        canvasContainer.style.position = 'relative';
+    }
+    canvasContainer.style.overflow = 'hidden';
+
+    // ----- video behind canvas, only inside canvas side -----
     const video = document.createElement('video');
     video.id = 'backgroundVideo';
     video.playsInline = true;
@@ -26,11 +39,10 @@
     video.preload = 'auto';
 
     Object.assign(video.style, {
-        position: 'fixed',
-        top: '0',
-        left: '0',
-        width: '100vw',
-        height: '100vh',
+        position: 'absolute',
+        inset: '0',
+        width: '100%',
+        height: '100%',
         objectFit: 'contain',
         zIndex: '0',
         background: 'black',
@@ -44,7 +56,8 @@
         background: 'transparent'
     });
 
-    document.body.prepend(video);
+    // place video only inside canvas container
+    canvasContainer.prepend(video);
 
     let currentVideoURL = null;
     let currentFrameIndex = 0;

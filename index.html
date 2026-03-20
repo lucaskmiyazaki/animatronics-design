@@ -6,15 +6,19 @@
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<canvas id="canvas"></canvas>
+  <div id="app">
+    <div id="three-container"></div>
+    <div id="canvas-container">
+      <canvas id="canvas"></canvas>
+    </div>
+  </div>
 
-<!-- Load skeleton classes first -->
-<script src="skeleton.js"></script>
-<!-- Then load canvas interaction -->
-<script src="chain.js"></script>
-<script src="canvas.js"></script>
-<script src="sidebar.js"></script>
-<script src="video.js"></script>
-<script src="main.js"></script>
+  <script src="skeleton.js"></script>
+  <script type="module" src="skeleton3d.js"></script> 
+  <script src="chain.js"></script>
+  <script src="canvas.js"></script>
+  <script src="sidebar.js"></script>
+  <script src="video.js"></script>
+  <script src="main.js"></script>
 </body>
 </html>

@@ -1,8 +1,18 @@
 const canvas = document.getElementById('canvas');
 const ctx = canvas.getContext('2d');
+const canvasContainer = document.getElementById('canvas-container') || canvas.parentElement;
 
-canvas.width = window.innerWidth;
-canvas.height = window.innerHeight;
+function resizeCanvas() {
+    if (canvasContainer) {
+        canvas.width = canvasContainer.clientWidth;
+        canvas.height = canvasContainer.clientHeight;
+    } else {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+    }
+}
+
+resizeCanvas();
 
 // one skeleton per frame
 const frameSkeletons = {};
@@ -55,6 +65,12 @@ function redrawAll() {
     drawCurrentChain();
 }
 
+function drawSkeleton3D() {
+    if (window.skeleton3DView) {
+        window.skeleton3DView.drawSkeleton(getCurrentSkeleton());
+    }
+}
+
 function setCurrentFrame(frameIndex) {
     currentFrameIndex = frameIndex;
     hoveredPoint = null;
@@ -80,6 +96,14 @@ function getPointAt(x, y) {
     return null;
 }
 
+function getCanvasMousePosition(e) {
+    const rect = canvas.getBoundingClientRect();
+    return {
+        x: e.clientX - rect.left,
+        y: e.clientY - rect.top
+    };
+}
+
 function createChainFromSkeleton(diameter = 20) {
     const skeleton = getCurrentSkeleton();
     if (!skeleton || skeleton.points.length < 2) return [];
@@ -94,8 +118,7 @@ canvas.addEventListener('click', (e) => {
     if (mode !== 'create') return;
 
     const skeleton = ensureCurrentSkeleton();
-    const x = e.clientX;
-    const y = e.clientY;
+    const { x, y } = getCanvasMousePosition(e);
 
     const newPoint = skeleton.addPoint(x, y, 0);
 
@@ -112,12 +135,13 @@ canvas.addEventListener('click', (e) => {
 
 canvas.addEventListener('mousedown', (e) => {
     if (mode !== 'edit') return;
-    draggedPoint = getPointAt(e.clientX, e.clientY);
+
+    const { x, y } = getCanvasMousePosition(e);
+    draggedPoint = getPointAt(x, y);
 });
 
 canvas.addEventListener('mousemove', (e) => {
-    const mouseX = e.clientX;
-    const mouseY = e.clientY;
+    const { x: mouseX, y: mouseY } = getCanvasMousePosition(e);
 
     hoveredPoint = getPointAt(mouseX, mouseY);
 
@@ -194,14 +218,13 @@ function copyPreviousFrameSkeleton() {
 document.addEventListener('keydown', (e) => {
     const key = e.key.toLowerCase();
 
-    if (key === 'c' && !e.repeat) {
-        copyPreviousFrameSkeleton();
+    if (key === 'w' && !e.repeat) {
+        drawSkeleton3D();
     }
 });
 
 window.addEventListener('resize', () => {
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight;
+    resizeCanvas();
     redrawAll();
 });
 
@@ -213,5 +236,6 @@ window.appActions = {
     ensureCurrentSkeleton,
     redrawAll,
     createChainFromSkeleton,
-    copyPreviousFrameSkeleton
+    copyPreviousFrameSkeleton,
+    drawSkeleton3D
 };
