@@ -26,6 +26,12 @@ const pointRadius = 5;
 const hoverRadius = 9;
 const hitRadius = 10;
 
+// z-drag state
+let dragStartMouse = null;
+let dragStartPoint = null;
+let isZDragging = false;
+const zDragScale = 1.0;
+
 // current generated chain
 const chain = new Chain();
 
@@ -51,6 +57,26 @@ function drawCurrentChain() {
     });
 }
 
+function drawZLabel() {
+    if (!draggedPoint || !isZDragging) return;
+
+    const label = `z=${(draggedPoint.z ?? 0).toFixed(1)}`;
+    const x = draggedPoint.x + 12;
+    const y = draggedPoint.y - 12;
+
+    ctx.font = '14px Arial';
+    const paddingX = 6;
+    const textWidth = ctx.measureText(label).width;
+    const boxWidth = textWidth + paddingX * 2;
+    const boxHeight = 20;
+
+    ctx.fillStyle = 'rgba(0,0,0,0.75)';
+    ctx.fillRect(x, y - boxHeight + 4, boxWidth, boxHeight);
+
+    ctx.fillStyle = 'white';
+    ctx.fillText(label, x + paddingX, y);
+}
+
 function redrawAll() {
     clearCanvas(ctx, canvas);
 
@@ -63,6 +89,7 @@ function redrawAll() {
     );
 
     drawCurrentChain();
+    drawZLabel();
 }
 
 function drawSkeleton3D() {
@@ -75,6 +102,9 @@ function setCurrentFrame(frameIndex) {
     currentFrameIndex = frameIndex;
     hoveredPoint = null;
     draggedPoint = null;
+    dragStartMouse = null;
+    dragStartPoint = null;
+    isZDragging = false;
     chain.clear();
     redrawAll();
 }
@@ -138,6 +168,16 @@ canvas.addEventListener('mousedown', (e) => {
 
     const { x, y } = getCanvasMousePosition(e);
     draggedPoint = getPointAt(x, y);
+
+    if (draggedPoint) {
+        dragStartMouse = { x, y };
+        dragStartPoint = {
+            x: draggedPoint.x,
+            y: draggedPoint.y,
+            z: draggedPoint.z ?? 0
+        };
+        isZDragging = mode === 'move' && e.shiftKey;
+    }
 });
 
 canvas.addEventListener('mousemove', (e) => {
@@ -153,12 +193,27 @@ canvas.addEventListener('mousemove', (e) => {
                 skeleton.updatePoint(draggedPoint, mouseX, mouseY, draggedPoint.z ?? 0);
                 chain.clear();
             } else if (mode === 'move') {
-                skeleton.movePoint(
-                    draggedPoint,
-                    mouseX,
-                    mouseY,
-                    draggedPoint.z ?? 0
-                );
+                isZDragging = e.shiftKey && !!dragStartMouse && !!dragStartPoint;
+
+                if (isZDragging) {
+                    const dy = mouseY - dragStartMouse.y;
+                    const targetZ = dragStartPoint.z - dy * zDragScale;
+
+                    skeleton.movePoint(
+                        draggedPoint,
+                        dragStartPoint.x,
+                        dragStartPoint.y,
+                        targetZ
+                    );
+                } else {
+                    skeleton.movePointXYLockedZ(
+                        draggedPoint,
+                        mouseX,
+                        mouseY,
+                        dragStartPoint ? dragStartPoint.z : (draggedPoint.z ?? 0)
+                    );
+                }
+
                 chain.clear();
             }
         }
@@ -169,11 +224,17 @@ canvas.addEventListener('mousemove', (e) => {
 
 canvas.addEventListener('mouseup', () => {
     draggedPoint = null;
+    dragStartMouse = null;
+    dragStartPoint = null;
+    isZDragging = false;
 });
 
 canvas.addEventListener('mouseleave', () => {
     hoveredPoint = null;
     draggedPoint = null;
+    dragStartMouse = null;
+    dragStartPoint = null;
+    isZDragging = false;
     redrawAll();
 });
 
@@ -183,6 +244,9 @@ function toggleMode() {
     else mode = 'create';
 
     draggedPoint = null;
+    dragStartMouse = null;
+    dragStartPoint = null;
+    isZDragging = false;
     return mode;
 }
 
@@ -210,6 +274,7 @@ function cloneSkeleton(sourceSkeleton) {
         const newEnd = pointMap.get(oldLine.end);
         const newLine = newSkeleton.addLine(newStart, newEnd);
         newLine.length = oldLine.length;
+        newLine.originalLength = oldLine.originalLength;
     });
 
     newSkeleton.updateAllGeometry();
@@ -226,6 +291,9 @@ function copyPreviousFrameSkeleton() {
 
     hoveredPoint = null;
     draggedPoint = null;
+    dragStartMouse = null;
+    dragStartPoint = null;
+    isZDragging = false;
     chain.clear();
     redrawAll();
 }
@@ -233,8 +301,16 @@ function copyPreviousFrameSkeleton() {
 document.addEventListener('keydown', (e) => {
     const key = e.key.toLowerCase();
 
-    if (key === 'w' && !e.repeat) {
-        drawSkeleton3D();
+    if (key === 'shift' && draggedPoint && mode === 'move') {
+        isZDragging = true;
+        redrawAll();
+    }
+});
+
+document.addEventListener('keyup', (e) => {
+    if (e.key === 'Shift') {
+        isZDragging = false;
+        redrawAll();
     }
 });
 
