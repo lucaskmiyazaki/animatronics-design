@@ -20,7 +20,7 @@ let currentFrameIndex = 0;
 
 let hoveredPoint = null;
 let draggedPoint = null;
-let mode = 'create'; // 'create' or 'edit'
+let mode = 'create'; // 'create' | 'edit' | 'move'
 
 const pointRadius = 5;
 const hoverRadius = 9;
@@ -134,7 +134,7 @@ canvas.addEventListener('click', (e) => {
 });
 
 canvas.addEventListener('mousedown', (e) => {
-    if (mode !== 'edit') return;
+    if (mode !== 'edit' && mode !== 'move') return;
 
     const { x, y } = getCanvasMousePosition(e);
     draggedPoint = getPointAt(x, y);
@@ -145,12 +145,23 @@ canvas.addEventListener('mousemove', (e) => {
 
     hoveredPoint = getPointAt(mouseX, mouseY);
 
-    if (mode === 'edit' && draggedPoint) {
+    if (draggedPoint) {
         const skeleton = getCurrentSkeleton();
+
         if (skeleton) {
-            skeleton.updatePoint(draggedPoint, mouseX, mouseY, draggedPoint.z ?? 0);
+            if (mode === 'edit') {
+                skeleton.updatePoint(draggedPoint, mouseX, mouseY, draggedPoint.z ?? 0);
+                chain.clear();
+            } else if (mode === 'move') {
+                skeleton.movePoint(
+                    draggedPoint,
+                    mouseX,
+                    mouseY,
+                    draggedPoint.z ?? 0
+                );
+                chain.clear();
+            }
         }
-        chain.clear();
     }
 
     redrawAll();
@@ -167,7 +178,10 @@ canvas.addEventListener('mouseleave', () => {
 });
 
 function toggleMode() {
-    mode = mode === 'create' ? 'edit' : 'create';
+    if (mode === 'create') mode = 'edit';
+    else if (mode === 'edit') mode = 'move';
+    else mode = 'create';
+
     draggedPoint = null;
     return mode;
 }
@@ -194,7 +208,8 @@ function cloneSkeleton(sourceSkeleton) {
     sourceSkeleton.lines.forEach(oldLine => {
         const newStart = pointMap.get(oldLine.start);
         const newEnd = pointMap.get(oldLine.end);
-        newSkeleton.addLine(newStart, newEnd);
+        const newLine = newSkeleton.addLine(newStart, newEnd);
+        newLine.length = oldLine.length;
     });
 
     newSkeleton.updateAllGeometry();

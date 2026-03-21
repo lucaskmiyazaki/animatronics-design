@@ -15,9 +15,14 @@ const modeButton = document.createElement('button');
 
 function updateModeButton() {
     const mode = window.appActions?.getMode?.() || 'create';
-    modeButton.textContent = mode === 'create'
-        ? 'Mode: Create'
-        : 'Mode: Edit';
+
+    if (mode === 'create') {
+        modeButton.textContent = 'Mode: Create';
+    } else if (mode === 'edit') {
+        modeButton.textContent = 'Mode: Edit';
+    } else if (mode === 'move') {
+        modeButton.textContent = 'Mode: Move';
+    }
 }
 
 modeButton.addEventListener('click', () => {
