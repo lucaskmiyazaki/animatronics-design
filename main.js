@@ -98,6 +98,12 @@ function drawSkeleton3D() {
     }
 }
 
+function drawChain3D() {
+    if (window.chain3DView) {
+        window.chain3DView.drawChain(chain);
+    }
+}
+
 function setCurrentFrame(frameIndex) {
     currentFrameIndex = frameIndex;
     hoveredPoint = null;
@@ -321,6 +327,11 @@ document.addEventListener('keydown', (e) => {
         isZDragging = true;
         redrawAll();
     }
+
+    if (e.key.toLowerCase() === 'w' && !e.repeat) {
+        createChainFromSkeleton(40);
+        drawChain3D(true);
+    }
 });
 
 document.addEventListener('keyup', (e) => {
@@ -344,5 +355,6 @@ window.appActions = {
     redrawAll,
     createChainFromSkeleton,
     copyPreviousFrameSkeleton,
-    drawSkeleton3D
+    drawSkeleton3D,
+    drawChain3D
 };
