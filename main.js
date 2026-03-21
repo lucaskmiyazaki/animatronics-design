@@ -176,7 +176,7 @@ canvas.addEventListener('mousedown', (e) => {
             y: draggedPoint.y,
             z: draggedPoint.z ?? 0
         };
-        isZDragging = mode === 'move' && e.shiftKey;
+        isZDragging = !!e.shiftKey;
     }
 });
 
@@ -189,12 +189,30 @@ canvas.addEventListener('mousemove', (e) => {
         const skeleton = getCurrentSkeleton();
 
         if (skeleton) {
+            isZDragging = !!e.shiftKey && !!dragStartMouse && !!dragStartPoint;
+
             if (mode === 'edit') {
-                skeleton.updatePoint(draggedPoint, mouseX, mouseY, draggedPoint.z ?? 0);
+                if (isZDragging) {
+                    const dy = mouseY - dragStartMouse.y;
+                    const targetZ = dragStartPoint.z - dy * zDragScale;
+
+                    skeleton.updatePoint(
+                        draggedPoint,
+                        dragStartPoint.x,
+                        dragStartPoint.y,
+                        targetZ
+                    );
+                } else {
+                    skeleton.updatePoint(
+                        draggedPoint,
+                        mouseX,
+                        mouseY,
+                        draggedPoint.z ?? 0
+                    );
+                }
+
                 chain.clear();
             } else if (mode === 'move') {
-                isZDragging = e.shiftKey && !!dragStartMouse && !!dragStartPoint;
-
                 if (isZDragging) {
                     const dy = mouseY - dragStartMouse.y;
                     const targetZ = dragStartPoint.z - dy * zDragScale;
@@ -299,9 +317,7 @@ function copyPreviousFrameSkeleton() {
 }
 
 document.addEventListener('keydown', (e) => {
-    const key = e.key.toLowerCase();
-
-    if (key === 'shift' && draggedPoint && mode === 'move') {
+    if (e.key === 'Shift' && draggedPoint && (mode === 'edit' || mode === 'move')) {
         isZDragging = true;
         redrawAll();
     }
