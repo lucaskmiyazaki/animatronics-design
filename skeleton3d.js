@@ -54,6 +54,8 @@ class Skeleton3DView {
         this.controls.enableRotate = true;
         this.controls.target.set(0, 0, 0);
 
+        this.hasFittedOnce = false;
+
         this.animate = this.animate.bind(this);
         this.onResize = this.onResize.bind(this);
 
@@ -111,7 +113,9 @@ class Skeleton3DView {
         this.scene.add(this.grid);
     }
 
-    drawSkeleton(skeleton) {
+    drawSkeleton(skeleton, options = {}) {
+        const { fitView = false } = options;
+
         this.clearSkeleton();
 
         if (!skeleton || skeleton.points.length === 0) return;
@@ -144,7 +148,15 @@ class Skeleton3DView {
             this.rootGroup.add(mesh);
         });
 
+        if (fitView || !this.hasFittedOnce) {
+            this.fitCameraToObject(this.rootGroup);
+            this.hasFittedOnce = true;
+        }
+    }
+
+    resetViewToSkeleton() {
         this.fitCameraToObject(this.rootGroup);
+        this.hasFittedOnce = true;
     }
 
     onResize() {

@@ -51,10 +51,12 @@ const uploadVideoButton = createButton('Upload Video', () => {
 
 const prevFrameButton = createButton('Prev Frame', () => {
     window.videoControls?.prevFrame();
+    window.appActions?.drawSkeleton3D();
 });
 
 const nextFrameButton = createButton('Next Frame', () => {
     window.videoControls?.nextFrame();
+    window.appActions?.drawSkeleton3D();
 });
 
 const CopyButton = createButton('Copy Prev', () => {
