@@ -134,38 +134,75 @@ function clearAllMeshPolygons(skeleton) {
     }
 }
 
-function generateMeshPolygonsForBranch(branch) {
-    if (!branch || !branch.points || !branch.lines) return;
-    if (branch.points.length < 2 || branch.lines.length < 1) return;
+function getSharedEdgeForPoint(branch, pointIndex) {
+    const point = branch.points[pointIndex];
 
-    // clear old polygons on this branch
+    // use the NEXT line direction
+    // for the last point, fall back to previous line
+    let refPoint;
+    if (pointIndex < branch.points.length - 1) {
+        refPoint = branch.points[pointIndex + 1];
+    } else if (pointIndex > 0) {
+        refPoint = branch.points[pointIndex - 1];
+    } else {
+        return null;
+    }
+
+    const dx = refPoint.x - point.x;
+    const dy = refPoint.y - point.y;
+    const len = Math.hypot(dx, dy) || 1;
+
+    const dir = { x: dx / len, y: dy / len };
+    const perp = { x: -dir.y, y: dir.x };
+
+    const r = (point.diameter ?? 20) / 2;
+
+    return [
+        { x: point.x + perp.x * r, y: point.y + perp.y * r },
+        { x: point.x - perp.x * r, y: point.y - perp.y * r }
+    ];
+}
+
+function edgeDistance(a, b) {
+    return Math.hypot(a.x - b.x, a.y - b.y);
+}
+
+function orientEdgeLikeReference(refEdge, edge) {
+    const direct =
+        edgeDistance(refEdge[0], edge[0]) + edgeDistance(refEdge[1], edge[1]);
+
+    const flipped =
+        edgeDistance(refEdge[0], edge[1]) + edgeDistance(refEdge[1], edge[0]);
+
+    return flipped > direct ? [edge[1], edge[0]] : edge;
+}
+
+function generateMeshPolygonsForBranch(branch) {
+    if (!branch || !branch.points || branch.points.length < 2) return;
+
+    const sharedEdges = branch.points.map((_, i) => getSharedEdgeForPoint(branch, i));
+
     branch.points.forEach(point => {
         point.meshPolygons = [];
     });
 
-    for (let i = 0; i < branch.lines.length; i++) {
-        const line = branch.lines[i];
-        const start = line.start;
-        const end = line.end;
+    for (let i = 0; i < branch.points.length - 1; i++) {
+        let edgeA = sharedEdges[i];
+        let edgeB = sharedEdges[i + 1];
 
-        // shared/current edge at start, perpendicular to this segment
-        const startEdge = getCrossEdgeAtPoint(start, line);
+        if (!edgeA || !edgeB) continue;
 
-        // opposite edge at end, also perpendicular to this same segment
-        const endEdge = getCrossEdgeAtPoint(end, line);
-
-        if (!startEdge || !endEdge) continue;
+        edgeB = orientEdgeLikeReference(edgeA, edgeB);
 
         const quad = [
-            startEdge[0],
-            startEdge[1],
-            endEdge[0],
-            endEdge[1]
+            edgeA[0],
+            edgeA[1],
+            edgeB[0],
+            edgeB[1]
         ];
 
-        // store quad in both points so either endpoint can "own" it visually
-        start.meshPolygons.push(quad);
-        end.meshPolygons.push(quad);
+        branch.points[i].meshPolygons.push(quad);
+        branch.points[i + 1].meshPolygons.push(quad);
     }
 }
 
