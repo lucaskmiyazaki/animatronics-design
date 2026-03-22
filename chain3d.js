@@ -1,5 +1,8 @@
 import { THREE } from './threeView.js';
-import { mergeGeometries } from 'https://esm.sh/three@0.160.0/examples/jsm/utils/BufferGeometryUtils.js';
+import {
+    mergeGeometries,
+    mergeVertices
+} from 'https://esm.sh/three@0.160.0/examples/jsm/utils/BufferGeometryUtils.js';
 import { STLExporter } from 'https://esm.sh/three@0.160.0/examples/jsm/exporters/STLExporter.js';
 import { CSG } from 'https://esm.sh/three-csg-ts';
 
@@ -251,38 +254,121 @@ class Chain3DView {
 
     mergeMeshes(meshes) {
         if (meshes.length === 0) return null;
-    
+
         const prepared = meshes.map(mesh => {
             const clone = mesh.clone();
             clone.geometry = mesh.geometry.clone();
-        
-            // bake transform
+
             clone.updateMatrixWorld(true);
             clone.geometry.applyMatrix4(clone.matrixWorld);
-        
-            // reset transform
+
             clone.matrix.identity();
             clone.matrixWorld.identity();
-        
-            // ensure outward orientation
+
             const vol = this.getSignedVolume(clone);
-        
             if (vol < 0) {
-                console.warn('Flipping mesh (inward facing)');
                 this.flipGeometryWinding(clone.geometry);
             }
-        
-            clone.geometry.computeVertexNormals();
-        
+
+            clone.geometry = this.cleanGeometry(clone.geometry);
             return clone;
         });
-    
+
         let result = prepared[0];
-    
+
         for (let i = 1; i < prepared.length; i++) {
             result = CSG.union(result, prepared[i]);
+            result.geometry = this.cleanGeometry(result.geometry);
         }
-    
+
+        return result;
+    }
+
+    cleanGeometry(geometry, tolerance = 1e-5) {
+        let g = geometry.clone();
+
+        if (g.index) {
+            g = g.toNonIndexed();
+        }
+
+        g = mergeVertices(g, tolerance);
+        g.computeVertexNormals();
+        g.computeBoundingBox();
+        g.computeBoundingSphere();
+
+        return g;
+    }
+
+    createHolePrismForLink(link, holeDiameterRatio = 0.2) {
+        const bottomCenter = this.vec3(link.getBottomCenter());
+        const topCenter = this.vec3(link.getTopCenter());
+
+        const axis = topCenter.clone().sub(bottomCenter);
+        const height = axis.length();
+
+        if (height < 1e-8) return null;
+
+        const holeSize = link.diameter * holeDiameterRatio;
+
+        const geometry = new THREE.BoxGeometry(
+            holeSize,
+            height,
+            holeSize
+        );
+
+        const material = new THREE.MeshStandardMaterial({ color: 0x8888ff });
+        const prism = new THREE.Mesh(geometry, material);
+
+        const mid = bottomCenter.clone().add(topCenter).multiplyScalar(0.5);
+        prism.position.copy(mid);
+
+        // BoxGeometry is aligned with Y by default
+        const yAxis = new THREE.Vector3(0, 1, 0);
+        const dir = axis.clone().normalize();
+        const quat = new THREE.Quaternion().setFromUnitVectors(yAxis, dir);
+        prism.quaternion.copy(quat);
+
+        prism.updateMatrixWorld(true);
+
+        return prism;
+    }
+
+    prepareMeshForCSG(mesh) {
+        const clone = mesh.clone();
+        clone.geometry = mesh.geometry.clone();
+
+        clone.updateMatrixWorld(true);
+        clone.geometry.applyMatrix4(clone.matrixWorld);
+
+        clone.matrix.identity();
+        clone.matrixWorld.identity();
+
+        const vol = this.getSignedVolume(clone);
+        if (vol < 0) {
+            this.flipGeometryWinding(clone.geometry);
+        }
+
+        clone.geometry.computeVertexNormals();
+        return clone;
+    }
+
+    subtractHolesFromMesh(mesh, links, holeDiameterRatio = 0.2) {
+        let result = this.prepareMeshForCSG(mesh);
+
+        links.forEach(link => {
+            const hole = this.createHolePrismForLink(link, holeDiameterRatio);
+            if (!hole) return;
+
+            result = CSG.subtract(result, hole);
+
+            //const vol = this.getSignedVolume(result);
+            //if (vol < 0) {
+            //    this.flipGeometryWinding(result.geometry);
+            //}
+
+            result.geometry = this.cleanGeometry(result.geometry);
+        });
+
         return result;
     }
 
@@ -297,7 +383,7 @@ class Chain3DView {
         const consumedKeys = new Set();
         const finalMeshes = [];
 
-        // 1) Build all link meshes first
+        // 1) Build all solid link meshes first
         skeleton.branches.forEach((branch, branchIndex) => {
             if (!branch || !branch.points || branch.points.length < 2) return;
 
@@ -318,16 +404,13 @@ class Chain3DView {
             });
         });
 
-        // 2) Merge only the exact connected pairs
+        // 2) Merge only exact connected pairs, then subtract holes
         console.log('Skeleton link connections:');
 
         (skeleton.connections || []).forEach((conn, connIndex) => {
             const childBranchIndex = conn.fromBranch;
             const parentBranchIndex = conn.toBranch;
             const parentLinkIndex = conn.lineIndex;
-
-            // by your skeleton logic, the attached point is the first point of child branch,
-            // so the touching child link is assumed to be link 0
             const childLinkIndex = 0;
 
             const childKey = `${childBranchIndex}:${childLinkIndex}`;
@@ -357,7 +440,14 @@ class Chain3DView {
                 return;
             }
 
-            const mergedMesh = this.mergeMeshes([childMesh, parentMesh]);
+            let mergedMesh = this.mergeMeshes([childMesh, parentMesh]);
+
+            mergedMesh = this.subtractHolesFromMesh(
+                mergedMesh,
+                [childMesh.userData.link, parentMesh.userData.link],
+                0.2
+            );
+
             mergedMesh.userData.mergedConnection = {
                 connectionIndex: connIndex,
                 fromBranch: childBranchIndex,
@@ -372,11 +462,19 @@ class Chain3DView {
             consumedKeys.add(parentKey);
         });
 
-        // 3) Add all meshes that were not merged
+        // 3) Add all unmerged meshes, subtracting their own hole
         this.meshes.forEach(mesh => {
             const key = `${mesh.userData.branchIndex}:${mesh.userData.linkIndex}`;
+
             if (!consumedKeys.has(key)) {
-                finalMeshes.push(mesh);
+                const holedMesh = this.subtractHolesFromMesh(
+                    mesh,
+                    [mesh.userData.link],
+                    0.2
+                );
+
+                holedMesh.userData = { ...mesh.userData };
+                finalMeshes.push(holedMesh);
             }
         });
 
@@ -389,7 +487,7 @@ class Chain3DView {
 
         this.group.children.forEach((mesh, i) => {
             const d = mesh.userData || {};
-        
+
             console.log(
                 `#${i}`,
                 d.mergedConnection
