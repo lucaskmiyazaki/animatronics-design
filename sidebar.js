@@ -22,6 +22,10 @@ function updateModeButton() {
         modeButton.textContent = 'Mode: Edit';
     } else if (mode === 'move') {
         modeButton.textContent = 'Mode: Move';
+    } else if (mode === 'mesh') {
+        modeButton.textContent = 'Mode: Mesh';
+    } else {
+        modeButton.textContent = `Mode: ${mode}`;
     }
 }
 
@@ -34,38 +38,30 @@ modeButton.addEventListener('click', () => {
 updateModeButton();
 
 const buildButton = createButton('Build Chain', () => {
-    window.appActions?.createChainFromSkeleton(40);
-    window.appActions?.drawChains3DForAllBranches(40);
-});
-
-const previewButton = createButton('Preview', () => {
-    window.appActions?.playPreviewAnimation();
-});
-
-const exportButton = createButton('Export DXF', () => {
-    window.appActions?.exportDXF();
+    window.appActions?.createChainFromSkeleton?.(40);
+    window.appActions?.drawChains3DForAllBranches?.(40);
 });
 
 const uploadVideoButton = createButton('Upload Video', () => {
-    window.videoControls?.openVideoPicker();
+    window.videoControls?.openVideoPicker?.();
 });
 
 const prevFrameButton = createButton('Prev Frame', () => {
-    window.videoControls?.prevFrame();
-    window.appActions?.drawSkeleton3D();
+    window.videoControls?.prevFrame?.();
+    window.appActions?.drawSkeleton3D?.();
 });
 
 const nextFrameButton = createButton('Next Frame', () => {
-    window.videoControls?.nextFrame();
-    window.appActions?.drawSkeleton3D();
+    window.videoControls?.nextFrame?.();
+    window.appActions?.drawSkeleton3D?.();
 });
 
-const CopyButton = createButton('Copy Prev', () => {
-    window.appActions?.copyPreviousFrameSkeleton();
+const copyButton = createButton('Copy Prev', () => {
+    window.appActions?.copyPreviousFrameSkeleton?.();
 });
 
 const renderSkeletonButton = createButton('Render Skeleton', () => {
-    window.appActions?.drawSkeleton3D();
+    window.appActions?.drawSkeleton3D?.();
 });
 
 const downloadSTLButton = createButton('Download STL', () => {
@@ -78,7 +74,7 @@ sidebar.append(
     uploadVideoButton,
     prevFrameButton,
     nextFrameButton,
-    CopyButton,
+    copyButton,
     renderSkeletonButton,
     buildButton,
     downloadSTLButton,

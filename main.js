@@ -51,16 +51,16 @@ function ensureCurrentSkeleton() {
     return frameSkeletons[currentFrameIndex];
 }
 
-function drawCurrentChain() {
-    chain.getLinks().forEach(link => {
-        const polygon = link.getXYProjection();
-        drawPolygon(ctx, polygon, 'rgba(255,165,0,0.25)', 'orange', 2);
-
-        polygon.forEach(p => {
-            drawPoint(ctx, p, 4, 'black');
-        });
-    });
-}
+//function drawCurrentChain() {
+//    chain.getLinks().forEach(link => {
+//        const polygon = link.getXYProjection();
+//        drawPolygon(ctx, polygon, 'rgba(255,165,0,0.25)', 'orange', 2);
+//
+//        polygon.forEach(p => {
+//            drawPoint(ctx, p, 4, 'black');
+//        });
+//    });
+//}
 
 function drawZLabel() {
     if (!draggedPoint || !isZDragging) return;
@@ -82,6 +82,62 @@ function drawZLabel() {
     ctx.fillText(label, x + paddingX, y);
 }
 
+function generateMeshPolygonsForPoint(point) {
+    if (!point || !point.lines || point.lines.length === 0) return;
+
+    const P = { x: point.x, y: point.y };
+    const r = (point.diameter ?? 20) / 2;
+    const depth = 20;
+
+    point.meshPolygons = [];
+
+    const lines = point.lines.slice(0, 2); // limit to 2 for now
+
+    lines.forEach(line => {
+        const other = line.start === point ? line.end : line.start;
+
+        const dx = other.x - point.x;
+        const dy = other.y - point.y;
+        const len = Math.hypot(dx, dy) || 1;
+
+        // direction
+        const d = { x: dx / len, y: dy / len };
+
+        // perpendicular
+        const n = { x: -d.y, y: d.x };
+
+        const p1 = { x: P.x + n.x * r, y: P.y + n.y * r };
+        const p2 = { x: P.x - n.x * r, y: P.y - n.y * r };
+
+        const p3 = { x: p2.x + d.x * depth, y: p2.y + d.y * depth };
+        const p4 = { x: p1.x + d.x * depth, y: p1.y + d.y * depth };
+
+        point.meshPolygons.push([p1, p2, p3, p4]);
+    });
+}
+
+function drawMeshPolygons(ctx, skeleton) {
+    if (!skeleton) return;
+
+    let points = [];
+
+    if (skeleton.points) {
+        points = skeleton.points;
+    } else if (skeleton.branches) {
+        skeleton.branches.forEach(branch => {
+            if (branch.points) points.push(...branch.points);
+        });
+    }
+
+    points.forEach(point => {
+        if (!point.meshPolygons) return;
+
+        point.meshPolygons.forEach(poly => {
+            drawPolygon(ctx, poly, 'rgba(0,150,255,0.3)', 'cyan', 2);
+        });
+    });
+}
+
 function redrawAll() {
     clearCanvas(ctx, canvas);
 
@@ -93,7 +149,8 @@ function redrawAll() {
         hoverRadius
     );
 
-    drawCurrentChain();
+    drawMeshPolygons(ctx, getCurrentSkeleton());
+
     drawZLabel();
 }
 
@@ -330,7 +387,7 @@ canvas.addEventListener('click', (e) => {
 });
 
 canvas.addEventListener('mousedown', (e) => {
-    if (mode !== 'edit' && mode !== 'move') return;
+    if (mode !== 'edit' && mode !== 'move' && mode !== 'mesh') return;
 
     const { x, y } = getCanvasMousePosition(e);
     const skeleton = getCurrentSkeleton();
@@ -347,6 +404,20 @@ canvas.addEventListener('mousedown', (e) => {
                 clickedPoint = null;
             }
         }
+    }
+
+    else if (mode === 'mesh' && draggedPoint) {
+        const dx = mouseX - draggedPoint.x;
+        const dy = mouseY - draggedPoint.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+
+        const newDiameter = Math.max(2, dist * 2);
+
+        console.log('[mesh] updating diameter:', newDiameter);
+
+        draggedPoint.diameter = newDiameter;
+
+        generateMeshPolygonsForPoint(draggedPoint);
     }
 
     draggedPoint = clickedPoint;
@@ -434,6 +505,14 @@ canvas.addEventListener('mousemove', (e) => {
                 }
 
                 chain.clear();
+            } else if (mode === 'mesh' && draggedPoint) {
+                const dx = mouseX - draggedPoint.x;
+                const dy = mouseY - draggedPoint.y;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+
+                draggedPoint.diameter = Math.max(2, dist * 2);
+
+                generateMeshPolygonsForPoint(draggedPoint);
             }
         }
     }
@@ -460,6 +539,7 @@ canvas.addEventListener('mouseleave', () => {
 function toggleMode() {
     if (mode === 'create') mode = 'edit';
     else if (mode === 'edit') mode = 'move';
+    else if (mode === 'move') mode = 'mesh';
     else mode = 'create';
 
     draggedPoint = null;

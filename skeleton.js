@@ -1,8 +1,10 @@
 class Point {
-    constructor(x, y, z = 0) {
+    constructor(x, y, z = 0, diameter = 10) {
         this.x = x;
         this.y = y;
         this.z = z;
+
+        this.diameter = diameter; // thickness of the mesh at this point
         this.lines = [];
     }
 }
