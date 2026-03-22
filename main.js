@@ -82,38 +82,113 @@ function drawZLabel() {
     ctx.fillText(label, x + paddingX, y);
 }
 
-function generateMeshPolygonsForPoint(point) {
-    if (!point || !point.lines || point.lines.length === 0) return;
+function normalize2(vx, vy) {
+    const len = Math.hypot(vx, vy) || 1;
+    return { x: vx / len, y: vy / len };
+}
 
-    const P = { x: point.x, y: point.y };
-    const r = (point.diameter ?? 20) / 2;
-    const depth = 20;
+function getPerp(vx, vy) {
+    return { x: -vy, y: vx };
+}
 
-    point.meshPolygons = [];
+function getPointDiameter(point, fallback = 20) {
+    return point?.diameter ?? fallback;
+}
 
-    const lines = point.lines.slice(0, 2); // limit to 2 for now
+function getCrossEdgeAtPoint(point, refLine, fallbackDiameter = 20) {
+    if (!point || !refLine) return null;
 
-    lines.forEach(line => {
-        const other = line.start === point ? line.end : line.start;
+    const other = refLine.start === point ? refLine.end : refLine.start;
+    if (!other) return null;
 
-        const dx = other.x - point.x;
-        const dy = other.y - point.y;
-        const len = Math.hypot(dx, dy) || 1;
+    const dir = normalize2(other.x - point.x, other.y - point.y);
+    const perp = getPerp(dir.x, dir.y);
 
-        // direction
-        const d = { x: dx / len, y: dy / len };
+    const radius = getPointDiameter(point, fallbackDiameter) / 2;
 
-        // perpendicular
-        const n = { x: -d.y, y: d.x };
+    return [
+        {
+            x: point.x + perp.x * radius,
+            y: point.y + perp.y * radius
+        },
+        {
+            x: point.x - perp.x * radius,
+            y: point.y - perp.y * radius
+        }
+    ];
+}
 
-        const p1 = { x: P.x + n.x * r, y: P.y + n.y * r };
-        const p2 = { x: P.x - n.x * r, y: P.y - n.y * r };
+function clearAllMeshPolygons(skeleton) {
+    if (!skeleton) return;
 
-        const p3 = { x: p2.x + d.x * depth, y: p2.y + d.y * depth };
-        const p4 = { x: p1.x + d.x * depth, y: p1.y + d.y * depth };
+    if (Array.isArray(skeleton.points)) {
+        skeleton.points.forEach(p => p.meshPolygons = []);
+    }
 
-        point.meshPolygons.push([p1, p2, p3, p4]);
+    if (Array.isArray(skeleton.branches)) {
+        skeleton.branches.forEach(branch => {
+            if (Array.isArray(branch.points)) {
+                branch.points.forEach(p => p.meshPolygons = []);
+            }
+        });
+    }
+}
+
+function generateMeshPolygonsForBranch(branch) {
+    if (!branch || !branch.points || !branch.lines) return;
+    if (branch.points.length < 2 || branch.lines.length < 1) return;
+
+    // clear old polygons on this branch
+    branch.points.forEach(point => {
+        point.meshPolygons = [];
     });
+
+    for (let i = 0; i < branch.lines.length; i++) {
+        const line = branch.lines[i];
+        const start = line.start;
+        const end = line.end;
+
+        // shared/current edge at start, perpendicular to this segment
+        const startEdge = getCrossEdgeAtPoint(start, line);
+
+        // opposite edge at end, also perpendicular to this same segment
+        const endEdge = getCrossEdgeAtPoint(end, line);
+
+        if (!startEdge || !endEdge) continue;
+
+        const quad = [
+            startEdge[0],
+            startEdge[1],
+            endEdge[0],
+            endEdge[1]
+        ];
+
+        // store quad in both points so either endpoint can "own" it visually
+        start.meshPolygons.push(quad);
+        end.meshPolygons.push(quad);
+    }
+}
+
+function generateMeshPolygonsForSkeleton(skeleton) {
+    if (!skeleton) return;
+
+    clearAllMeshPolygons(skeleton);
+
+    if (Array.isArray(skeleton.branches) && skeleton.branches.length > 0) {
+        skeleton.branches.forEach(branch => {
+            generateMeshPolygonsForBranch(branch);
+        });
+        return;
+    }
+
+    // flat skeleton fallback
+    if (Array.isArray(skeleton.points) && Array.isArray(skeleton.lines)) {
+        const fakeBranch = {
+            points: skeleton.points,
+            lines: skeleton.lines
+        };
+        generateMeshPolygonsForBranch(fakeBranch);
+    }
 }
 
 function drawMeshPolygons(ctx, skeleton) {
@@ -395,35 +470,37 @@ canvas.addEventListener('mousedown', (e) => {
 
     // In move mode, prevent dragging the first point of a linked branch
     if (mode === 'move' && clickedPoint && skeleton && skeleton.branches) {
-        const branchIndex = skeleton.branches.findIndex(b => b && b.points && b.points[0] === clickedPoint);
-        
+        const branchIndex = skeleton.branches.findIndex(
+            b => b && b.points && b.points[0] === clickedPoint
+        );
+
         if (branchIndex !== -1 && skeleton.connections) {
-            const linkedConnections = skeleton.connections.filter(conn => conn.fromBranch === branchIndex);
-            
+            const linkedConnections = skeleton.connections.filter(
+                conn => conn.fromBranch === branchIndex
+            );
+
             if (linkedConnections.length > 0) {
                 clickedPoint = null;
             }
         }
     }
 
-    else if (mode === 'mesh' && draggedPoint) {
-        const dx = mouseX - draggedPoint.x;
-        const dy = mouseY - draggedPoint.y;
-        const dist = Math.sqrt(dx * dx + dy * dy);
-
-        const newDiameter = Math.max(2, dist * 2);
-
-        console.log('[mesh] updating diameter:', newDiameter);
-
-        draggedPoint.diameter = newDiameter;
-
-        generateMeshPolygonsForPoint(draggedPoint);
-    }
-
     draggedPoint = clickedPoint;
-
-    // record whether mousedown started on a point so click can suppress line-creation
     mouseDownDraggedPoint = draggedPoint;
+
+    if (mode === 'mesh') {
+        if (draggedPoint) {
+            if (draggedPoint.diameter == null) {
+                draggedPoint.diameter = 20;
+            }
+
+            generateMeshPolygonsForSkeleton(skeleton);
+            console.log('[mesh] selected point:', draggedPoint);
+        }
+
+        redrawAll();
+        return;
+    }
 
     if (draggedPoint) {
         dragStartMouse = { x, y };
@@ -510,9 +587,12 @@ canvas.addEventListener('mousemove', (e) => {
                 const dy = mouseY - draggedPoint.y;
                 const dist = Math.sqrt(dx * dx + dy * dy);
 
-                draggedPoint.diameter = Math.max(2, dist * 2);
+                const newDiameter = Math.max(2, dist * 2);
+                draggedPoint.diameter = newDiameter;
 
-                generateMeshPolygonsForPoint(draggedPoint);
+                console.log('[mesh] updating diameter:', newDiameter);
+
+                generateMeshPolygonsForSkeleton(skeleton);
             }
         }
     }
