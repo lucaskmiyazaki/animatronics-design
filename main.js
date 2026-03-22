@@ -121,11 +121,14 @@ function setCurrentFrame(frameIndex) {
 function getPointAt(x, y) {
     const skeleton = getCurrentSkeleton();
     if (!skeleton) return null;
-    // Prefer flat skeleton.points, otherwise use first branch's points
-    let points = Array.isArray(skeleton.points) ? skeleton.points : null;
+    // Prefer flat skeleton.points, otherwise search all branches' points
+    let points = Array.isArray(skeleton.points) ? skeleton.points : [];
     if ((!points || points.length === 0) && skeleton.branches && skeleton.branches.length > 0) {
-        const idx = Math.max(0, Math.min(currentBranch, skeleton.branches.length - 1));
-        points = skeleton.branches[idx].points;
+        // aggregate all branch points so we can hit-test any point
+        points = [];
+        for (const branch of skeleton.branches) {
+            if (branch && Array.isArray(branch.points)) points.push(...branch.points);
+        }
     }
 
     if (!points) return null;
@@ -137,6 +140,22 @@ function getPointAt(x, y) {
 
         if (dist <= hitRadius) {
             return point;
+        }
+    }
+
+    return null;
+}
+
+// Find the branch (or skeleton) that owns a given point object
+function findOwnerForPoint(point) {
+    const skeleton = getCurrentSkeleton();
+    if (!skeleton || !point) return null;
+
+    if (skeleton.points && skeleton.points.includes(point)) return skeleton;
+
+    if (skeleton.branches) {
+        for (const branch of skeleton.branches) {
+            if (branch && branch.points && branch.points.includes(point)) return branch;
         }
     }
 
@@ -165,6 +184,16 @@ function distancePointToSegment(px, py, x1, y1, x2, y2) {
     const cx = x1 + vx * t;
     const cy = y1 + vy * t;
     return Math.hypot(px - cx, py - cy);
+}
+
+// project point (px,py) onto segment (x1,y1)-(x2,y2)
+function projectPointToSegment(px, py, x1, y1, x2, y2) {
+    const vx = x2 - x1;
+    const vy = y2 - y1;
+    const len2 = vx * vx + vy * vy;
+    if (len2 < 1e-12) return { x: x1, y: y1 };
+    const t = Math.max(0, Math.min(1, ((px - x1) * vx + (py - y1) * vy) / len2));
+    return { x: x1 + vx * t, y: y1 + vy * t };
 }
 
 // returns the nearest line object (from flat skeleton or any branch) within hitRadius, otherwise null
@@ -214,32 +243,56 @@ function createChainFromSkeleton(diameter = 20) {
 }
 
 canvas.addEventListener('click', (e) => {
-    if (mode !== 'create') return;
     const skeleton = ensureCurrentSkeleton();
     const { x, y } = getCanvasMousePosition(e);
 
-    // Backwards compatibility: if skeleton has flat API
-    if (skeleton && typeof skeleton.addPoint === 'function' && Array.isArray(skeleton.points)) {
-        const newPoint = skeleton.addPoint(x, y, 0);
-        if (skeleton.points && skeleton.points.length > 1) {
-            skeleton.addLine(skeleton.points[skeleton.points.length - 2], newPoint);
+    // If in Create mode: add a point to the current branch (backwards-compatible)
+    if (mode === 'create') {
+        if (!skeleton) return;
+
+        // Backwards compatibility: if skeleton has flat API
+        if (skeleton && typeof skeleton.addPoint === 'function' && Array.isArray(skeleton.points)) {
+            const newPoint = skeleton.addPoint(x, y, 0);
+            if (skeleton.points && skeleton.points.length > 1) {
+                skeleton.addLine(skeleton.points[skeleton.points.length - 2], newPoint);
+            }
+
+        } else if (skeleton && Array.isArray(skeleton.branches)) {
+            let branch = skeleton.branches[currentBranch];
+            if (!branch) branch = skeleton.addBranch();
+
+            const newPoint = branch.addPoint(x, y, 0);
+            if (branch.points.length > 1) {
+                branch.addLine(branch.points[branch.points.length - 2], newPoint);
+            }
+
+        } else {
+            console.error('[main.click] No valid skeleton or branches to add point to');
         }
 
-    } else if (skeleton && Array.isArray(skeleton.branches)) {
-        let branch = skeleton.branches[currentBranch];
-        if (!branch) branch = skeleton.addBranch();
-
-        const newPoint = branch.addPoint(x, y, 0);
-        if (branch.points.length > 1) {
-            branch.addLine(branch.points[branch.points.length - 2], newPoint);
-        }
-
-    } else {
-        console.error('[main.click] No valid skeleton or branches to add point to');
+        chain.clear();
+        redrawAll();
+        return;
     }
 
-    chain.clear();
-    redrawAll();
+    // If in Edit mode and a line is clicked, create a new branch starting at the projected point
+    if (mode === 'edit') {
+        if (!skeleton) return;
+        const line = getLineAt(x, y);
+        if (!line) return;
+
+        // project click to the segment and create a new branch with that starting point
+        const proj = projectPointToSegment(x, y, line.start.x, line.start.y, line.end.x, line.end.y);
+        const newBranch = skeleton.addBranch();
+        newBranch.addPoint(proj.x, proj.y, 0);
+
+        // switch to the new branch and enter create mode
+        currentBranch = skeleton.branches.indexOf(newBranch);
+        mode = 'create';
+        chain.clear();
+        redrawAll();
+        return;
+    }
 });
 
 canvas.addEventListener('mousedown', (e) => {
