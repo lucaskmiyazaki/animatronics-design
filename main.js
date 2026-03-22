@@ -522,15 +522,6 @@ document.addEventListener('keydown', (e) => {
         isZDragging = true;
         redrawAll();
     }
-
-    if (e.key.toLowerCase() === 'w' && !e.repeat) {
-        createChainFromSkeleton(40);
-        drawChain3D(true);
-    }
-
-    if (e.key.toLowerCase() === 'q' && !e.repeat) {
-        drawChains3DForAllBranches(40);
-    }
 });
 
 document.addEventListener('keyup', (e) => {
