@@ -477,26 +477,69 @@ function cloneSkeleton(sourceSkeleton) {
     if (!sourceSkeleton) return null;
 
     const newSkeleton = new Skeleton();
+
+    // Maps old branch -> new branch
+    const branchMap = new Map();
+
+    // Maps old point -> new point
     const pointMap = new Map();
 
-    sourceSkeleton.points.forEach(oldPoint => {
-        const newPoint = newSkeleton.addPoint(
-            oldPoint.x,
-            oldPoint.y,
-            oldPoint.z ?? 0
-        );
-        pointMap.set(oldPoint, newPoint);
+    // 1) Clone branches, points, and lines
+    (sourceSkeleton.branches || []).forEach(oldBranch => {
+    if (!oldBranch) return;
+
+    const newBranch = newSkeleton.addBranch();
+    branchMap.set(oldBranch, newBranch);
+
+    if (Array.isArray(oldBranch.points)) {
+        oldBranch.points.forEach(oldPoint => {
+            const newPoint = newBranch.addPoint(
+                oldPoint.x,
+                oldPoint.y,
+                oldPoint.z ?? 0
+            );
+            pointMap.set(oldPoint, newPoint);
+        });
+    }
+
+    if (Array.isArray(oldBranch.lines)) {
+        oldBranch.lines.forEach(oldLine => {
+            const newStart = pointMap.get(oldLine.start);
+            const newEnd = pointMap.get(oldLine.end);
+            if (!newStart || !newEnd) return;
+
+            const newLine = newBranch.addLine(newStart, newEnd);
+
+            if ('length' in oldLine) newLine.length = oldLine.length;
+            if ('originalLength' in oldLine) newLine.originalLength = oldLine.originalLength;
+        });
+    }
+});
+
+    // 2) Clone connections
+    (sourceSkeleton.connections || []).forEach(oldConn => {
+        const newConn = {
+            fromBranch: oldConn.fromBranch,
+            toBranch: oldConn.toBranch,
+            lineIndex: oldConn.lineIndex,
+            t: oldConn.t,
+            proj: oldConn.proj
+                ? {
+                    x: oldConn.proj.x,
+                    y: oldConn.proj.y,
+                    z: oldConn.proj.z ?? 0
+                }
+                : null
+        };
+
+        newSkeleton.connections.push(newConn);
     });
 
-    sourceSkeleton.lines.forEach(oldLine => {
-        const newStart = pointMap.get(oldLine.start);
-        const newEnd = pointMap.get(oldLine.end);
-        const newLine = newSkeleton.addLine(newStart, newEnd);
-        newLine.length = oldLine.length;
-        newLine.originalLength = oldLine.originalLength;
-    });
+    // 3) Recompute projections to ensure consistency with cloned geometry
+    if (typeof newSkeleton.updateConnections === 'function') {
+        newSkeleton.updateConnections();
+    }
 
-    newSkeleton.updateAllGeometry();
     return newSkeleton;
 }
 
