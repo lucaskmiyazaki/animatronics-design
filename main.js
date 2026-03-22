@@ -19,6 +19,7 @@ const frameSkeletons = {};
 let currentFrameIndex = 0;
 
 let hoveredPoint = null;
+let hoveredLine = null;
 let draggedPoint = null;
 let mode = 'create'; // 'create' | 'edit' | 'move'
 // index of the currently-active branch within a Skeleton
@@ -148,6 +149,49 @@ function getCanvasMousePosition(e) {
         x: e.clientX - rect.left,
         y: e.clientY - rect.top
     };
+}
+
+// distance from point (px,py) to segment (x1,y1)-(x2,y2)
+function distancePointToSegment(px, py, x1, y1, x2, y2) {
+    const vx = x2 - x1;
+    const vy = y2 - y1;
+    const wx = px - x1;
+    const wy = py - y1;
+    const len2 = vx * vx + vy * vy;
+    if (len2 < 1e-12) return Math.hypot(px - x1, py - y1);
+    let t = (wx * vx + wy * vy) / len2;
+    if (t < 0) t = 0;
+    else if (t > 1) t = 1;
+    const cx = x1 + vx * t;
+    const cy = y1 + vy * t;
+    return Math.hypot(px - cx, py - cy);
+}
+
+// returns the nearest line object (from flat skeleton or any branch) within hitRadius, otherwise null
+function getLineAt(x, y) {
+    const skeleton = getCurrentSkeleton();
+    if (!skeleton) return null;
+
+    let bestLine = null;
+    let bestDist = Infinity;
+
+    if (skeleton.lines) {
+        for (const line of skeleton.lines) {
+            const d = distancePointToSegment(x, y, line.start.x, line.start.y, line.end.x, line.end.y);
+            if (d < bestDist) { bestDist = d; bestLine = line; }
+        }
+    }
+
+    if (skeleton.branches) {
+        for (const branch of skeleton.branches) {
+            for (const line of branch.lines) {
+                const d = distancePointToSegment(x, y, line.start.x, line.start.y, line.end.x, line.end.y);
+                if (d < bestDist) { bestDist = d; bestLine = line; }
+            }
+        }
+    }
+
+    return (bestLine && bestDist <= hitRadius) ? bestLine : null;
 }
 
 function createChainFromSkeleton(diameter = 20) {
