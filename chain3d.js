@@ -1,13 +1,16 @@
 import { THREE } from './threeView.js';
+import { mergeGeometries } from 'https://esm.sh/three@0.160.0/examples/jsm/utils/BufferGeometryUtils.js';
 
 class Chain3DView {
     constructor(sharedView) {
         this.view = sharedView;
         this.group = this.view.getOrCreateGroup('chainGroup');
+        this.meshes = [];
     }
 
     clearChain() {
         this.view.clearGroup(this.group);
+        this.meshes = [];
     }
 
     vec3(p) {
@@ -29,7 +32,6 @@ class Chain3DView {
         }
 
         u.normalize();
-
         const v = new THREE.Vector3().crossVectors(n, u).normalize();
 
         return { u, v, n };
@@ -50,7 +52,6 @@ class Chain3DView {
     reorderTopCorners(bottomCorners, topCorners) {
         const variants = [];
 
-        // forward cyclic shifts
         for (let shift = 0; shift < 4; shift++) {
             variants.push([
                 topCorners[(0 + shift) % 4],
@@ -60,7 +61,6 @@ class Chain3DView {
             ]);
         }
 
-        // reversed cyclic shifts
         const reversed = [topCorners[0], topCorners[3], topCorners[2], topCorners[1]];
         for (let shift = 0; shift < 4; shift++) {
             variants.push([
@@ -114,7 +114,6 @@ class Chain3DView {
         const b = bottomCorners.map(addVertex);
         const t = topCorners.map(addVertex);
 
-        // side faces
         for (let i = 0; i < 4; i++) {
             const j = (i + 1) % 4;
 
@@ -122,11 +121,9 @@ class Chain3DView {
             indices.push(b[i], t[j], t[i]);
         }
 
-        // bottom face
         indices.push(b[0], b[2], b[1]);
         indices.push(b[0], b[3], b[2]);
 
-        // top face
         indices.push(t[0], t[1], t[2]);
         indices.push(t[0], t[2], t[3]);
 
@@ -146,22 +143,74 @@ class Chain3DView {
         return new THREE.Mesh(geometry, material);
     }
 
-    drawChain(chain, options = {}) {
-        const { fitView = false } = options;
+    buildBranchAdjacency(skeleton) {
+        const adjacency = new Map();
 
-        this.clearChain();
+        for (let i = 0; i < skeleton.branches.length; i++) {
+            adjacency.set(i, new Set());
+        }
 
-        if (!chain || !chain.getLinks || chain.getLinks().length === 0) return;
+        (skeleton.connections || []).forEach(conn => {
+            if (
+                conn.fromBranch == null ||
+                conn.toBranch == null ||
+                conn.fromBranch < 0 ||
+                conn.toBranch < 0
+            ) return;
 
-        chain.getLinks().forEach(link => {
-            const mesh = this.createSquareLoftMesh(link);
-            this.group.add(mesh);
+            adjacency.get(conn.fromBranch).add(conn.toBranch);
+            adjacency.get(conn.toBranch).add(conn.fromBranch);
         });
 
-        if (fitView || !this.view.hasFittedOnce) {
-            this.view.fitCameraToObject(this.group);
-            this.view.hasFittedOnce = true;
+        return adjacency;
+    }
+
+    findBranchComponents(skeleton) {
+        const adjacency = this.buildBranchAdjacency(skeleton);
+        const visited = new Set();
+        const components = [];
+
+        for (let i = 0; i < skeleton.branches.length; i++) {
+            if (visited.has(i)) continue;
+
+            const stack = [i];
+            const component = [];
+
+            visited.add(i);
+
+            while (stack.length > 0) {
+                const current = stack.pop();
+                component.push(current);
+
+                for (const neighbor of adjacency.get(current)) {
+                    if (!visited.has(neighbor)) {
+                        visited.add(neighbor);
+                        stack.push(neighbor);
+                    }
+                }
+            }
+
+            components.push(component);
         }
+
+        return components;
+    }
+
+    mergeMeshes(meshes) {
+        if (!meshes || meshes.length === 0) return null;
+        if (meshes.length === 1) return meshes[0];
+
+        const geometries = meshes.map(m => {
+            const g = m.geometry.clone();
+            g.applyMatrix4(m.matrixWorld);
+            return g;
+        });
+
+        const mergedGeometry = mergeGeometries(geometries, true);
+        mergedGeometry.computeVertexNormals();
+
+        const material = meshes[0].material.clone();
+        return new THREE.Mesh(mergedGeometry, material);
     }
 
     drawChainsForSkeleton(skeleton, diameter = 20, options = {}) {
@@ -171,18 +220,111 @@ class Chain3DView {
 
         if (!skeleton || !skeleton.branches || skeleton.branches.length === 0) return;
 
-        skeleton.branches.forEach(branch => {
+        const meshMap = new Map();
+        const consumedKeys = new Set();
+        const finalMeshes = [];
+
+        // 1) Build all link meshes first
+        skeleton.branches.forEach((branch, branchIndex) => {
             if (!branch || !branch.points || branch.points.length < 2) return;
 
             const tempChain = new Chain();
             tempChain.buildFromSkeleton(branch, diameter);
 
-            tempChain.getLinks().forEach(link => {
+            tempChain.getLinks().forEach((link, linkIndex) => {
                 const mesh = this.createSquareLoftMesh(link);
-                this.group.add(mesh);
+
+                mesh.userData.branchIndex = branchIndex;
+                mesh.userData.linkIndex = linkIndex;
+                mesh.userData.link = link;
+
+                this.meshes.push(mesh);
+
+                const key = `${branchIndex}:${linkIndex}`;
+                meshMap.set(key, mesh);
             });
         });
 
+        // 2) Merge only the exact connected pairs
+        console.log('Skeleton link connections:');
+
+        (skeleton.connections || []).forEach((conn, connIndex) => {
+            const childBranchIndex = conn.fromBranch;
+            const parentBranchIndex = conn.toBranch;
+            const parentLinkIndex = conn.lineIndex;
+
+            // by your skeleton logic, the attached point is the first point of child branch,
+            // so the touching child link is assumed to be link 0
+            const childLinkIndex = 0;
+
+            const childKey = `${childBranchIndex}:${childLinkIndex}`;
+            const parentKey = `${parentBranchIndex}:${parentLinkIndex}`;
+
+            const childMesh = meshMap.get(childKey);
+            const parentMesh = meshMap.get(parentKey);
+
+            console.log(
+                `[${connIndex}] B${childBranchIndex}-L${childLinkIndex} <-> B${parentBranchIndex}-L${parentLinkIndex}`,
+                conn
+            );
+
+            if (!childMesh || !parentMesh) {
+                console.warn(
+                    `Connection ${connIndex} could not be merged because one mesh was not found.`,
+                    { childKey, parentKey }
+                );
+                return;
+            }
+
+            if (consumedKeys.has(childKey) || consumedKeys.has(parentKey)) {
+                console.warn(
+                    `Connection ${connIndex} skipped because one of the links was already merged.`,
+                    { childKey, parentKey }
+                );
+                return;
+            }
+
+            const mergedMesh = this.mergeMeshes([childMesh, parentMesh]);
+            mergedMesh.userData.mergedConnection = {
+                connectionIndex: connIndex,
+                fromBranch: childBranchIndex,
+                fromLink: childLinkIndex,
+                toBranch: parentBranchIndex,
+                toLink: parentLinkIndex
+            };
+
+            finalMeshes.push(mergedMesh);
+
+            consumedKeys.add(childKey);
+            consumedKeys.add(parentKey);
+        });
+
+        // 3) Add all meshes that were not merged
+        this.meshes.forEach(mesh => {
+            const key = `${mesh.userData.branchIndex}:${mesh.userData.linkIndex}`;
+            if (!consumedKeys.has(key)) {
+                finalMeshes.push(mesh);
+            }
+        });
+
+        // 4) Add everything to group
+        finalMeshes.forEach(mesh => {
+            this.group.add(mesh);
+        });
+
+        console.log('Final meshes:');
+
+        this.group.children.forEach((mesh, i) => {
+            const d = mesh.userData || {};
+        
+            console.log(
+                `#${i}`,
+                d.mergedConnection
+                    ? `MERGED: B${d.mergedConnection.fromBranch}-L${d.mergedConnection.fromLink} <-> B${d.mergedConnection.toBranch}-L${d.mergedConnection.toLink}`
+                    : `SINGLE: B${d.branchIndex}-L${d.linkIndex}`
+            );
+        });
+        
         if (fitView || !this.view.hasFittedOnce) {
             this.view.fitCameraToObject(this.group);
             this.view.hasFittedOnce = true;
