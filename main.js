@@ -383,12 +383,44 @@ canvas.addEventListener('mousemove', (e) => {
             if (mode === 'edit') {
                 const owner = findOwnerForPoint(draggedPoint);
                 if (owner && typeof owner.updatePoint === 'function') {
+                    let targetX = mouseX;
+                    let targetY = mouseY;
+                    let targetZ = draggedPoint.z ?? 0;
+
+                    // Check if this is the first point of a linked branch - constrain to line
+                    const branchIndex = skeleton.branches.indexOf(owner);
+                    const isLinkedFirstPoint = branchIndex !== -1 && 
+                        owner.points.length > 0 && 
+                        owner.points[0] === draggedPoint &&
+                        skeleton.connections && 
+                        skeleton.connections.some(conn => conn.fromBranch === branchIndex);
+
+                    if (isLinkedFirstPoint) {
+                        // Find the line this point is connected to
+                        const conn = skeleton.connections.find(c => c.fromBranch === branchIndex);
+                        if (conn) {
+                            const linkedBranch = skeleton.branches[conn.toBranch];
+                            const line = linkedBranch.lines[conn.lineIndex];
+                            if (line) {
+                                // Project mouse position onto the line
+                                const proj = projectPointToSegment(mouseX, mouseY, line.start.x, line.start.y, line.end.x, line.end.y);
+                                targetX = proj.x;
+                                targetY = proj.y;
+                            }
+                        }
+                    }
+
                     if (isZDragging) {
                         const dy = mouseY - dragStartMouse.y;
-                        const targetZ = dragStartPoint.z - dy * zDragScale;
-                        owner.updatePoint(draggedPoint, dragStartPoint.x, dragStartPoint.y, targetZ);
+                        targetZ = dragStartPoint.z - dy * zDragScale;
+                        owner.updatePoint(draggedPoint, dragStartPoint.x, dragStartPoint.y, targetZ, skeleton);
                     } else {
-                        owner.updatePoint(draggedPoint, mouseX, mouseY, draggedPoint.z ?? 0);
+                        owner.updatePoint(draggedPoint, targetX, targetY, targetZ, skeleton);
+                    }
+
+                    // Update connection parameters after moving the point
+                    if (skeleton && skeleton.updateConnections) {
+                        skeleton.updateConnections();
                     }
                 }
 
