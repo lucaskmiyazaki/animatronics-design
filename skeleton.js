@@ -73,7 +73,16 @@ class Branch {
         this.lines.forEach(line => line.updateGeometry());
     }
 
-    movePoint(point, targetX, targetY, targetZ = point.z, tolerance = 0.2) {
+    movePoint(point, targetX, targetY, targetZ = point.z, tolerance = 0.2, skeleton = null) {
+        // Check if this is the first point of a linked branch
+        if (skeleton && this.points.length > 0 && this.points[0] === point) {
+            const branchIndex = skeleton.branches.indexOf(this);
+            if (branchIndex !== -1 && skeleton.connections && 
+                skeleton.connections.some(conn => conn.fromBranch === branchIndex)) {
+                return; // Cannot move first point of linked branch directly
+            }
+        }
+
         const connected = point.lines;
 
         if (connected.length === 0) {
@@ -95,10 +104,16 @@ class Branch {
                 { x: targetX, y: targetY, z: targetZ }
             );
 
+            const oldX = point.x, oldY = point.y, oldZ = point.z;
             point.x = candidate.x;
             point.y = candidate.y;
             point.z = candidate.z;
             line.updateGeometry();
+
+            // Move any branches connected to this line
+            if (skeleton) {
+                this._moveLinkedBranches(skeleton, line, candidate.x - oldX, candidate.y - oldY, candidate.z - oldZ);
+            }
             return;
         }
 
@@ -121,12 +136,19 @@ class Branch {
             );
 
             if (candidate) {
+                const oldX = point.x, oldY = point.y, oldZ = point.z;
                 point.x = candidate.x;
                 point.y = candidate.y;
                 point.z = candidate.z;
 
                 l1.updateGeometry();
                 l2.updateGeometry();
+
+                // Move any branches connected to these lines
+                if (skeleton) {
+                    this._moveLinkedBranches(skeleton, l1, candidate.x - oldX, candidate.y - oldY, candidate.z - oldZ);
+                    this._moveLinkedBranches(skeleton, l2, candidate.x - oldX, candidate.y - oldY, candidate.z - oldZ);
+                }
             }
 
             return;
@@ -135,7 +157,16 @@ class Branch {
         // 3+ connected lines: not handled yet
     }
 
-    movePointXYLockedZ(point, targetX, targetY, z = point.z, tolerance = 0.2) {
+    movePointXYLockedZ(point, targetX, targetY, z = point.z, tolerance = 0.2, skeleton = null) {
+        // Check if this is the first point of a linked branch
+        if (skeleton && this.points.length > 0 && this.points[0] === point) {
+            const branchIndex = skeleton.branches.indexOf(this);
+            if (branchIndex !== -1 && skeleton.connections && 
+                skeleton.connections.some(conn => conn.fromBranch === branchIndex)) {
+                return; // Cannot move first point of linked branch directly
+            }
+        }
+
         const connected = point.lines;
 
         if (connected.length === 0) {
@@ -161,10 +192,14 @@ class Branch {
             let mag = Math.hypot(dx, dy);
 
             if (mag < 1e-8) {
+                const oldX = point.x, oldY = point.y;
                 point.x = anchor.x + maxR2;
                 point.y = anchor.y;
                 point.z = z;
                 line.updateGeometry();
+                if (skeleton) {
+                    this._moveLinkedBranches(skeleton, line, point.x - oldX, point.y - oldY, 0);
+                }
                 return;
             }
 
@@ -173,11 +208,15 @@ class Branch {
 
             mag = this.clamp(mag, minR2, maxR2);
 
+            const oldX = point.x, oldY = point.y;
             point.x = anchor.x + dx * mag;
             point.y = anchor.y + dy * mag;
             point.z = z;
 
             line.updateGeometry();
+            if (skeleton) {
+                this._moveLinkedBranches(skeleton, line, point.x - oldX, point.y - oldY, 0);
+            }
             return;
         }
 
@@ -210,18 +249,83 @@ class Branch {
             );
 
             if (candidate) {
+                const oldX = point.x, oldY = point.y;
                 point.x = candidate.x;
                 point.y = candidate.y;
                 point.z = z;
 
                 l1.updateGeometry();
                 l2.updateGeometry();
+
+                if (skeleton) {
+                    this._moveLinkedBranches(skeleton, l1, candidate.x - oldX, candidate.y - oldY, 0);
+                    this._moveLinkedBranches(skeleton, l2, candidate.x - oldX, candidate.y - oldY, 0);
+                }
             }
 
             return;
         }
 
         // 3+ connected lines: not handled yet
+    }
+
+    _moveLinkedBranches(skeleton, line, dx, dy, dz) {
+        if (!skeleton || !skeleton.connections) {
+            console.log('_moveLinkedBranches: no skeleton or connections');
+            return;
+        }
+
+        const branchIndex = skeleton.branches.indexOf(this);
+        console.log('_moveLinkedBranches - current branch index:', branchIndex);
+        console.log('_moveLinkedBranches - total branches:', skeleton.branches.length);
+        console.log('_moveLinkedBranches - total connections:', skeleton.connections.length);
+        
+        if (branchIndex === -1) {
+            console.log('_moveLinkedBranches: branch not found in skeleton');
+            return;
+        }
+        const lineIndex = this.lines.indexOf(line);
+        if (lineIndex === -1) {
+            console.log('_moveLinkedBranches: line not found in branch');
+            return;
+        }
+
+        console.log('_moveLinkedBranches - looking for connections where toBranch=' + branchIndex + ', lineIndex=' + lineIndex);
+
+        // Find all branches connected to this line
+        skeleton.connections.forEach(conn => {
+            console.log('  checking connection: fromBranch=' + conn.fromBranch + ', toBranch=' + conn.toBranch + ', lineIndex=' + conn.lineIndex);
+            if (conn.toBranch === branchIndex && conn.lineIndex === lineIndex) {
+                console.log('  MATCH! Moving linked branch', conn.fromBranch);
+                const linkedBranch = skeleton.branches[conn.fromBranch];
+                if (linkedBranch && linkedBranch.points.length > 0) {
+                    // Calculate new projection point on the line at parameter t
+                    const t = conn.t;
+                    const start = line.start;
+                    const end = line.end;
+                    const newProj = {
+                        x: start.x + (end.x - start.x) * t,
+                        y: start.y + (end.y - start.y) * t,
+                        z: (start.z ?? 0) + ((end.z ?? 0) - (start.z ?? 0)) * t
+                    };
+
+                    // Calculate offset from first point's current position to where it should be
+                    const firstPoint = linkedBranch.points[0];
+                    const offsetX = newProj.x - firstPoint.x;
+                    const offsetY = newProj.y - firstPoint.y;
+                    const offsetZ = newProj.z - (firstPoint.z ?? 0);
+
+                    // Move all points in the linked branch to maintain relative position
+                    linkedBranch.points.forEach(p => {
+                        p.x += offsetX;
+                        p.y += offsetY;
+                        p.z = (p.z ?? 0) + offsetZ;
+                    });
+                    linkedBranch.updateAllGeometry();
+                    skeleton.updateConnections();
+                }
+            }
+        });
     }
 
     sub3(a, b) {
@@ -575,11 +679,20 @@ class Skeleton {
     connectFirstPointToLine(branchA, branchB, lineIndex) {
         const a = typeof branchA === 'number' ? this.branches[branchA] : branchA;
         const b = typeof branchB === 'number' ? this.branches[branchB] : branchB;
-        if (!a || !b) return null;
-        if (!a.points || a.points.length === 0) return null;
+        if (!a || !b) {
+            console.log('connectFirstPointToLine: a or b not found');
+            return null;
+        }
+        if (!a.points || a.points.length === 0) {
+            console.log('connectFirstPointToLine: a has no points');
+            return null;
+        }
         const p = a.points[0];
         const line = b.lines[lineIndex];
-        if (!line) return null;
+        if (!line) {
+            console.log('connectFirstPointToLine: line not found at index', lineIndex);
+            return null;
+        }
 
         const start = line.start;
         const end = line.end;
@@ -593,6 +706,7 @@ class Skeleton {
 
         const conn = { fromBranch: this.branches.indexOf(a), toBranch: this.branches.indexOf(b), lineIndex, t, proj };
         this.connections.push(conn);
+        console.log('connectFirstPointToLine: created connection', conn);
         return conn;
     }
 

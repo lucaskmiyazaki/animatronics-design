@@ -291,13 +291,32 @@ canvas.addEventListener('click', (e) => {
         const line = getLineAt(x, y);
         if (!line) return;
 
+        // Find which branch owns this line
+        let lineBranchIndex = -1;
+        let lineIndexInBranch = -1;
+        for (let i = 0; i < skeleton.branches.length; i++) {
+            const idx = skeleton.branches[i].lines.indexOf(line);
+            if (idx !== -1) {
+                lineBranchIndex = i;
+                lineIndexInBranch = idx;
+                break;
+            }
+        }
+
         // project click to the segment and create a new branch with that starting point
         const proj = projectPointToSegment(x, y, line.start.x, line.start.y, line.end.x, line.end.y);
         const newBranch = skeleton.addBranch();
         newBranch.addPoint(proj.x, proj.y, 0);
 
+        // Connect the new branch to the line
+        const newBranchIndex = skeleton.branches.indexOf(newBranch);
+        if (lineBranchIndex !== -1 && lineIndexInBranch !== -1) {
+            skeleton.connectFirstPointToLine(newBranchIndex, lineBranchIndex, lineIndexInBranch);
+            console.log('Created connection between branch', newBranchIndex, 'and line', lineIndexInBranch, 'of branch', lineBranchIndex);
+        }
+
         // switch to the new branch and enter create mode
-        currentBranch = skeleton.branches.indexOf(newBranch);
+        currentBranch = newBranchIndex;
         mode = 'create';
         chain.clear();
         redrawAll();
@@ -309,7 +328,32 @@ canvas.addEventListener('mousedown', (e) => {
     if (mode !== 'edit' && mode !== 'move') return;
 
     const { x, y } = getCanvasMousePosition(e);
-    draggedPoint = getPointAt(x, y);
+    const skeleton = getCurrentSkeleton();
+    let clickedPoint = getPointAt(x, y);
+
+    console.log('mousedown - clicked point:', clickedPoint);
+    console.log('skeleton:', skeleton);
+    console.log('skeleton.branches:', skeleton?.branches);
+    console.log('skeleton.connections:', skeleton?.connections);
+
+    // In move mode, prevent dragging the first point of a linked branch
+    if (mode === 'move' && clickedPoint && skeleton && skeleton.branches) {
+        const branchIndex = skeleton.branches.findIndex(b => b && b.points && b.points[0] === clickedPoint);
+        console.log('branchIndex of clicked point:', branchIndex);
+        console.log('is first point of branch?:', branchIndex !== -1);
+        
+        if (branchIndex !== -1 && skeleton.connections) {
+            const linkedConnections = skeleton.connections.filter(conn => conn.fromBranch === branchIndex);
+            console.log('connections for this branch:', linkedConnections);
+            
+            if (linkedConnections.length > 0) {
+                console.log('Point is linked, preventing drag');
+                clickedPoint = null;
+            }
+        }
+    }
+
+    draggedPoint = clickedPoint;
 
     // record whether mousedown started on a point so click can suppress line-creation
     mouseDownDraggedPoint = draggedPoint;
@@ -337,36 +381,27 @@ canvas.addEventListener('mousemove', (e) => {
             isZDragging = !!e.shiftKey && !!dragStartMouse && !!dragStartPoint;
 
             if (mode === 'edit') {
-                if (isZDragging) {
-                    const dy = mouseY - dragStartMouse.y;
-                    const targetZ = dragStartPoint.z - dy * zDragScale;
-
-                    // call update on first branch if skeleton uses branches
-                    const owner = (skeleton && Array.isArray(skeleton.branches) && skeleton.branches[0]) ? skeleton.branches[0] : skeleton;
-                    if (owner && typeof owner.updatePoint === 'function') {
+                const owner = findOwnerForPoint(draggedPoint);
+                if (owner && typeof owner.updatePoint === 'function') {
+                    if (isZDragging) {
+                        const dy = mouseY - dragStartMouse.y;
+                        const targetZ = dragStartPoint.z - dy * zDragScale;
                         owner.updatePoint(draggedPoint, dragStartPoint.x, dragStartPoint.y, targetZ);
-                    }
-                } else {
-                    const owner = (skeleton && Array.isArray(skeleton.branches) && skeleton.branches[0]) ? skeleton.branches[0] : skeleton;
-                    if (owner && typeof owner.updatePoint === 'function') {
+                    } else {
                         owner.updatePoint(draggedPoint, mouseX, mouseY, draggedPoint.z ?? 0);
                     }
                 }
 
                 chain.clear();
             } else if (mode === 'move') {
-                if (isZDragging) {
-                    const dy = mouseY - dragStartMouse.y;
-                    const targetZ = dragStartPoint.z - dy * zDragScale;
-
-                    const owner = (skeleton && Array.isArray(skeleton.branches) && skeleton.branches[0]) ? skeleton.branches[0] : skeleton;
-                    if (owner && typeof owner.movePoint === 'function') {
-                        owner.movePoint(draggedPoint, dragStartPoint.x, dragStartPoint.y, targetZ);
-                    }
-                } else {
-                    const owner = (skeleton && Array.isArray(skeleton.branches) && skeleton.branches[0]) ? skeleton.branches[0] : skeleton;
-                    if (owner && typeof owner.movePointXYLockedZ === 'function') {
-                        owner.movePointXYLockedZ(draggedPoint, mouseX, mouseY, dragStartPoint ? dragStartPoint.z : (draggedPoint.z ?? 0));
+                const owner = findOwnerForPoint(draggedPoint);
+                if (owner && typeof owner.movePoint === 'function') {
+                    if (isZDragging) {
+                        const dy = mouseY - dragStartMouse.y;
+                        const targetZ = dragStartPoint.z - dy * zDragScale;
+                        owner.movePoint(draggedPoint, dragStartPoint.x, dragStartPoint.y, targetZ, 0.2, skeleton);
+                    } else {
+                        owner.movePointXYLockedZ(draggedPoint, mouseX, mouseY, dragStartPoint ? dragStartPoint.z : (draggedPoint.z ?? 0), 0.2, skeleton);
                     }
                 }
 
@@ -478,6 +513,15 @@ window.addEventListener('resize', () => {
     redrawAll();
 });
 
+function connectBranches(branchAIndex, branchBIndex, lineIndex) {
+    const skeleton = getCurrentSkeleton();
+    if (!skeleton) return null;
+    const conn = skeleton.connectFirstPointToLine(branchAIndex, branchBIndex, lineIndex);
+    console.log('connectBranches called:', { branchAIndex, branchBIndex, lineIndex, result: conn });
+    redrawAll();
+    return conn;
+}
+
 window.appActions = {
     toggleMode,
     getMode,
@@ -488,5 +532,6 @@ window.appActions = {
     createChainFromSkeleton,
     copyPreviousFrameSkeleton,
     drawSkeleton3D,
-    drawChain3D
+    drawChain3D,
+    connectBranches
 };
