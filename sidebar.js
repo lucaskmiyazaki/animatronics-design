@@ -68,6 +68,10 @@ const renderSkeletonButton = createButton('Render Skeleton', () => {
     window.appActions?.drawSkeleton3D();
 });
 
+const downloadSTLButton = createButton('Download STL', () => {
+    window.chain3DView?.downloadFinalMeshesAsSTL?.();
+});
+
 // Add buttons to sidebar
 sidebar.append(
     modeButton,
@@ -77,6 +81,7 @@ sidebar.append(
     CopyButton,
     renderSkeletonButton,
     buildButton,
+    downloadSTLButton,
 );
 
 // Add sidebar to page

@@ -1,5 +1,7 @@
 import { THREE } from './threeView.js';
 import { mergeGeometries } from 'https://esm.sh/three@0.160.0/examples/jsm/utils/BufferGeometryUtils.js';
+import { STLExporter } from 'https://esm.sh/three@0.160.0/examples/jsm/exporters/STLExporter.js';
+import { CSG } from 'https://esm.sh/three-csg-ts';
 
 class Chain3DView {
     constructor(sharedView) {
@@ -196,21 +198,92 @@ class Chain3DView {
         return components;
     }
 
+    getSignedVolume(mesh) {
+        const g = mesh.geometry;
+        const pos = g.attributes.position;
+        const index = g.index;
+
+        let volume = 0;
+
+        const vA = new THREE.Vector3();
+        const vB = new THREE.Vector3();
+        const vC = new THREE.Vector3();
+
+        const read = (i, v) => v.fromBufferAttribute(pos, i);
+
+        if (index) {
+            for (let i = 0; i < index.count; i += 3) {
+                read(index.getX(i), vA);
+                read(index.getX(i + 1), vB);
+                read(index.getX(i + 2), vC);
+
+                volume += vA.dot(vB.clone().cross(vC)) / 6;
+            }
+        } else {
+            for (let i = 0; i < pos.count; i += 3) {
+                read(i, vA);
+                read(i + 1, vB);
+                read(i + 2, vC);
+
+                volume += vA.dot(vB.clone().cross(vC)) / 6;
+            }
+        }
+
+        return volume;
+    }
+
+    flipGeometryWinding(geometry) {
+        if (!geometry.index) return;
+
+        const index = geometry.index;
+
+        for (let i = 0; i < index.count; i += 3) {
+            const b = index.getX(i + 1);
+            const c = index.getX(i + 2);
+
+            index.setX(i + 1, c);
+            index.setX(i + 2, b);
+        }
+
+        index.needsUpdate = true;
+        geometry.computeVertexNormals();
+    }
+
     mergeMeshes(meshes) {
-        if (!meshes || meshes.length === 0) return null;
-        if (meshes.length === 1) return meshes[0];
-
-        const geometries = meshes.map(m => {
-            const g = m.geometry.clone();
-            g.applyMatrix4(m.matrixWorld);
-            return g;
+        if (meshes.length === 0) return null;
+    
+        const prepared = meshes.map(mesh => {
+            const clone = mesh.clone();
+            clone.geometry = mesh.geometry.clone();
+        
+            // bake transform
+            clone.updateMatrixWorld(true);
+            clone.geometry.applyMatrix4(clone.matrixWorld);
+        
+            // reset transform
+            clone.matrix.identity();
+            clone.matrixWorld.identity();
+        
+            // ensure outward orientation
+            const vol = this.getSignedVolume(clone);
+        
+            if (vol < 0) {
+                console.warn('Flipping mesh (inward facing)');
+                this.flipGeometryWinding(clone.geometry);
+            }
+        
+            clone.geometry.computeVertexNormals();
+        
+            return clone;
         });
-
-        const mergedGeometry = mergeGeometries(geometries, true);
-        mergedGeometry.computeVertexNormals();
-
-        const material = meshes[0].material.clone();
-        return new THREE.Mesh(mergedGeometry, material);
+    
+        let result = prepared[0];
+    
+        for (let i = 1; i < prepared.length; i++) {
+            result = CSG.union(result, prepared[i]);
+        }
+    
+        return result;
     }
 
     drawChainsForSkeleton(skeleton, diameter = 20, options = {}) {
@@ -324,11 +397,45 @@ class Chain3DView {
                     : `SINGLE: B${d.branchIndex}-L${d.linkIndex}`
             );
         });
-        
+
         if (fitView || !this.view.hasFittedOnce) {
             this.view.fitCameraToObject(this.group);
             this.view.hasFittedOnce = true;
         }
+    }
+
+    downloadBlob(filename, text) {
+        const blob = new Blob([text], { type: 'model/stl' });
+        const url = URL.createObjectURL(blob);
+        
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        a.click();
+        
+        URL.revokeObjectURL(url);
+    }
+    
+    downloadFinalMeshesAsSTL(prefix = 'mesh') {
+        const exporter = new STLExporter();
+        const finalMeshes = this.group.children.filter(obj => obj.isMesh);
+    
+        console.log(`Exporting ${finalMeshes.length} final meshes...`);
+    
+        finalMeshes.forEach((mesh, i) => {
+            const stlString = exporter.parse(mesh, { binary: false });
+        
+            const d = mesh.userData || {};
+            let name = `${prefix}_${i}`;
+        
+            if (d.mergedConnection) {
+                name = `merged_B${d.mergedConnection.fromBranch}_L${d.mergedConnection.fromLink}__B${d.mergedConnection.toBranch}_L${d.mergedConnection.toLink}`;
+            } else if (d.branchIndex != null && d.linkIndex != null) {
+                name = `branch_${d.branchIndex}_link_${d.linkIndex}`;
+            }
+        
+            this.downloadBlob(`${name}.stl`, stlString);
+        });
     }
 }
 
