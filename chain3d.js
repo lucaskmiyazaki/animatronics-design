@@ -21,7 +21,6 @@ class Chain3DView {
         let u = a.clone().sub(n.clone().multiplyScalar(a.dot(n)));
 
         if (u.lengthSq() < 1e-8) {
-            // fallback if axis is parallel to normal
             const ref = Math.abs(n.x) < 0.9
                 ? new THREE.Vector3(1, 0, 0)
                 : new THREE.Vector3(0, 1, 0);
@@ -48,6 +47,48 @@ class Chain3DView {
         ];
     }
 
+    reorderTopCorners(bottomCorners, topCorners) {
+        const variants = [];
+
+        // forward cyclic shifts
+        for (let shift = 0; shift < 4; shift++) {
+            variants.push([
+                topCorners[(0 + shift) % 4],
+                topCorners[(1 + shift) % 4],
+                topCorners[(2 + shift) % 4],
+                topCorners[(3 + shift) % 4]
+            ]);
+        }
+
+        // reversed cyclic shifts
+        const reversed = [topCorners[0], topCorners[3], topCorners[2], topCorners[1]];
+        for (let shift = 0; shift < 4; shift++) {
+            variants.push([
+                reversed[(0 + shift) % 4],
+                reversed[(1 + shift) % 4],
+                reversed[(2 + shift) % 4],
+                reversed[(3 + shift) % 4]
+            ]);
+        }
+
+        let best = variants[0];
+        let bestScore = Infinity;
+
+        for (const candidate of variants) {
+            let score = 0;
+            for (let i = 0; i < 4; i++) {
+                score += bottomCorners[i].distanceToSquared(candidate[i]);
+            }
+
+            if (score < bestScore) {
+                bestScore = score;
+                best = candidate;
+            }
+        }
+
+        return best;
+    }
+
     createSquareLoftMesh(link) {
         const bottomCenter = this.vec3(link.getBottomCenter());
         const topCenter = this.vec3(link.getTopCenter());
@@ -59,7 +100,8 @@ class Chain3DView {
         const size = link.diameter;
 
         const bottomCorners = this.getSquareCorners(bottomCenter, bottomNormal, axis, size);
-        const topCorners = this.getSquareCorners(topCenter, topNormal, axis, size);
+        const rawTopCorners = this.getSquareCorners(topCenter, topNormal, axis, size);
+        const topCorners = this.reorderTopCorners(bottomCorners, rawTopCorners);
 
         const positions = [];
         const indices = [];
