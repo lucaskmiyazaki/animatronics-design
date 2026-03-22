@@ -41,7 +41,7 @@ class Line {
     }
 }
 
-class Skeleton {
+class Branch {
     constructor() {
         this.points = [];
         this.lines = [];
@@ -550,5 +550,71 @@ class Skeleton {
         }
 
         return best;
+    }
+}
+
+// Minimal top-level Skeleton that stores Branch instances and simple connections
+class Skeleton {
+    constructor() {
+        this.branches = []; // array of Branch
+        // connections: { fromBranch: idx, toBranch: idx, lineIndex: idx, t: 0..1, proj: {x,y,z} }
+        this.connections = [];
+    }
+
+    addBranch(branch) {
+        if (branch instanceof Branch) {
+            this.branches.push(branch);
+            return branch;
+        }
+        const b = new Branch();
+        this.branches.push(b);
+        return b;
+    }
+
+    // Connect the first point (index 0) of branchA to a line of branchB and store projection.
+    connectFirstPointToLine(branchA, branchB, lineIndex) {
+        const a = typeof branchA === 'number' ? this.branches[branchA] : branchA;
+        const b = typeof branchB === 'number' ? this.branches[branchB] : branchB;
+        if (!a || !b) return null;
+        if (!a.points || a.points.length === 0) return null;
+        const p = a.points[0];
+        const line = b.lines[lineIndex];
+        if (!line) return null;
+
+        const start = line.start;
+        const end = line.end;
+
+        const seg = b.sub3(end, start);
+        const ap = b.sub3(p, start);
+        const segLen2 = b.dot3(seg, seg);
+        let t = segLen2 < 1e-8 ? 0 : b.dot3(ap, seg) / segLen2;
+        t = b.clamp(t, 0, 1);
+        const proj = b.add3(start, b.mul3(seg, t));
+
+        const conn = { fromBranch: this.branches.indexOf(a), toBranch: this.branches.indexOf(b), lineIndex, t, proj };
+        this.connections.push(conn);
+        return conn;
+    }
+
+    // Recompute projections after geometry changes
+    updateConnections() {
+        this.connections.forEach(conn => {
+            const a = this.branches[conn.fromBranch];
+            const b = this.branches[conn.toBranch];
+            if (!a || !b || !a.points || a.points.length === 0) return;
+            const p = a.points[0];
+            const line = b.lines[conn.lineIndex];
+            if (!line) return;
+
+            const start = line.start;
+            const end = line.end;
+            const seg = b.sub3(end, start);
+            const ap = b.sub3(p, start);
+            const segLen2 = b.dot3(seg, seg);
+            let t = segLen2 < 1e-8 ? 0 : b.dot3(ap, seg) / segLen2;
+            t = b.clamp(t, 0, 1);
+            conn.t = t;
+            conn.proj = b.add3(start, b.mul3(seg, t));
+        });
     }
 }

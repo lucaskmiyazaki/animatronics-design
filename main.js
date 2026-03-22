@@ -21,6 +21,8 @@ let currentFrameIndex = 0;
 let hoveredPoint = null;
 let draggedPoint = null;
 let mode = 'create'; // 'create' | 'edit' | 'move'
+// index of the currently-active branch within a Skeleton
+let currentBranch = 0;
 
 const pointRadius = 5;
 const hoverRadius = 9;
@@ -118,8 +120,16 @@ function setCurrentFrame(frameIndex) {
 function getPointAt(x, y) {
     const skeleton = getCurrentSkeleton();
     if (!skeleton) return null;
+    // Prefer flat skeleton.points, otherwise use first branch's points
+    let points = Array.isArray(skeleton.points) ? skeleton.points : null;
+    if ((!points || points.length === 0) && skeleton.branches && skeleton.branches.length > 0) {
+        const idx = Math.max(0, Math.min(currentBranch, skeleton.branches.length - 1));
+        points = skeleton.branches[idx].points;
+    }
 
-    for (const point of skeleton.points) {
+    if (!points) return null;
+
+    for (const point of points) {
         const dx = x - point.x;
         const dy = y - point.y;
         const dist = Math.sqrt(dx * dx + dy * dy);
@@ -142,9 +152,18 @@ function getCanvasMousePosition(e) {
 
 function createChainFromSkeleton(diameter = 20) {
     const skeleton = getCurrentSkeleton();
-    if (!skeleton || skeleton.points.length < 2) return [];
+    if (!skeleton) return [];
 
-    chain.buildFromSkeleton(skeleton, diameter);
+    // Use flat skeleton if available, otherwise use first branch
+    let useSkeleton = skeleton;
+    if ((!skeleton.points || skeleton.points.length < 2) && skeleton.branches && skeleton.branches.length > 0) {
+        const idx = Math.max(0, Math.min(currentBranch, skeleton.branches.length - 1));
+        useSkeleton = skeleton.branches[idx];
+    }
+
+    if (!useSkeleton.points || useSkeleton.points.length < 2) return [];
+
+    chain.buildFromSkeleton(useSkeleton, diameter);
     redrawAll();
 
     return chain.getLinks();
@@ -152,17 +171,27 @@ function createChainFromSkeleton(diameter = 20) {
 
 canvas.addEventListener('click', (e) => {
     if (mode !== 'create') return;
-
     const skeleton = ensureCurrentSkeleton();
     const { x, y } = getCanvasMousePosition(e);
 
-    const newPoint = skeleton.addPoint(x, y, 0);
+    // Backwards compatibility: if skeleton has flat API
+    if (skeleton && typeof skeleton.addPoint === 'function' && Array.isArray(skeleton.points)) {
+        const newPoint = skeleton.addPoint(x, y, 0);
+        if (skeleton.points && skeleton.points.length > 1) {
+            skeleton.addLine(skeleton.points[skeleton.points.length - 2], newPoint);
+        }
 
-    if (skeleton.points.length > 1) {
-        skeleton.addLine(
-            skeleton.points[skeleton.points.length - 2],
-            newPoint
-        );
+    } else if (skeleton && Array.isArray(skeleton.branches)) {
+        let branch = skeleton.branches[currentBranch];
+        if (!branch) branch = skeleton.addBranch();
+
+        const newPoint = branch.addPoint(x, y, 0);
+        if (branch.points.length > 1) {
+            branch.addLine(branch.points[branch.points.length - 2], newPoint);
+        }
+
+    } else {
+        console.error('[main.click] No valid skeleton or branches to add point to');
     }
 
     chain.clear();
@@ -202,19 +231,16 @@ canvas.addEventListener('mousemove', (e) => {
                     const dy = mouseY - dragStartMouse.y;
                     const targetZ = dragStartPoint.z - dy * zDragScale;
 
-                    skeleton.updatePoint(
-                        draggedPoint,
-                        dragStartPoint.x,
-                        dragStartPoint.y,
-                        targetZ
-                    );
+                    // call update on first branch if skeleton uses branches
+                    const owner = (skeleton && Array.isArray(skeleton.branches) && skeleton.branches[0]) ? skeleton.branches[0] : skeleton;
+                    if (owner && typeof owner.updatePoint === 'function') {
+                        owner.updatePoint(draggedPoint, dragStartPoint.x, dragStartPoint.y, targetZ);
+                    }
                 } else {
-                    skeleton.updatePoint(
-                        draggedPoint,
-                        mouseX,
-                        mouseY,
-                        draggedPoint.z ?? 0
-                    );
+                    const owner = (skeleton && Array.isArray(skeleton.branches) && skeleton.branches[0]) ? skeleton.branches[0] : skeleton;
+                    if (owner && typeof owner.updatePoint === 'function') {
+                        owner.updatePoint(draggedPoint, mouseX, mouseY, draggedPoint.z ?? 0);
+                    }
                 }
 
                 chain.clear();
@@ -223,19 +249,15 @@ canvas.addEventListener('mousemove', (e) => {
                     const dy = mouseY - dragStartMouse.y;
                     const targetZ = dragStartPoint.z - dy * zDragScale;
 
-                    skeleton.movePoint(
-                        draggedPoint,
-                        dragStartPoint.x,
-                        dragStartPoint.y,
-                        targetZ
-                    );
+                    const owner = (skeleton && Array.isArray(skeleton.branches) && skeleton.branches[0]) ? skeleton.branches[0] : skeleton;
+                    if (owner && typeof owner.movePoint === 'function') {
+                        owner.movePoint(draggedPoint, dragStartPoint.x, dragStartPoint.y, targetZ);
+                    }
                 } else {
-                    skeleton.movePointXYLockedZ(
-                        draggedPoint,
-                        mouseX,
-                        mouseY,
-                        dragStartPoint ? dragStartPoint.z : (draggedPoint.z ?? 0)
-                    );
+                    const owner = (skeleton && Array.isArray(skeleton.branches) && skeleton.branches[0]) ? skeleton.branches[0] : skeleton;
+                    if (owner && typeof owner.movePointXYLockedZ === 'function') {
+                        owner.movePointXYLockedZ(draggedPoint, mouseX, mouseY, dragStartPoint ? dragStartPoint.z : (draggedPoint.z ?? 0));
+                    }
                 }
 
                 chain.clear();
