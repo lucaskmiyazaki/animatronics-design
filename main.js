@@ -21,6 +21,8 @@ let currentFrameIndex = 0;
 let hoveredPoint = null;
 let hoveredLine = null;
 let draggedPoint = null;
+// set to the draggedPoint value at last mousedown; used to suppress click-on-line when editing a point
+let mouseDownDraggedPoint = null;
 let mode = 'create'; // 'create' | 'edit' | 'move'
 // index of the currently-active branch within a Skeleton
 let currentBranch = 0;
@@ -246,6 +248,14 @@ canvas.addEventListener('click', (e) => {
     const skeleton = ensureCurrentSkeleton();
     const { x, y } = getCanvasMousePosition(e);
 
+    // If the last mousedown targeted a point, suppress click-on-line behavior when editing a point
+    if (mouseDownDraggedPoint) {
+        // clear the flag for next interactions
+        mouseDownDraggedPoint = null;
+        // If we were editing a point, don't treat this click as a line-click to create a branch
+        if (mode === 'edit') return;
+    }
+
     // If in Create mode: add a point to the current branch (backwards-compatible)
     if (mode === 'create') {
         if (!skeleton) return;
@@ -300,6 +310,9 @@ canvas.addEventListener('mousedown', (e) => {
 
     const { x, y } = getCanvasMousePosition(e);
     draggedPoint = getPointAt(x, y);
+
+    // record whether mousedown started on a point so click can suppress line-creation
+    mouseDownDraggedPoint = draggedPoint;
 
     if (draggedPoint) {
         dragStartMouse = { x, y };
