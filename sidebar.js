@@ -35,6 +35,8 @@ updateModeButton();
 
 const buildButton = createButton('Build Chain', () => {
     window.appActions?.createChainFromSkeleton(40);
+    window.appActions?.drawChain3D(true);
+
 });
 
 const previewButton = createButton('Preview', () => {
@@ -70,14 +72,12 @@ const renderSkeletonButton = createButton('Render Skeleton', () => {
 // Add buttons to sidebar
 sidebar.append(
     modeButton,
-    buildButton,
-    previewButton,
-    exportButton,
     uploadVideoButton,
     prevFrameButton,
     nextFrameButton,
     CopyButton,
-    renderSkeletonButton
+    renderSkeletonButton,
+    buildButton,
 );
 
 // Add sidebar to page
