@@ -109,6 +109,12 @@ function drawChain3D() {
     }
 }
 
+function drawChains3DForAllBranches(diameter = 20) {
+    if (window.chain3DView) {
+        window.chain3DView.drawChainsForSkeleton(getCurrentSkeleton(), diameter);
+    }
+}
+
 function setCurrentFrame(frameIndex) {
     currentFrameIndex = frameIndex;
     hoveredPoint = null;
@@ -521,6 +527,10 @@ document.addEventListener('keydown', (e) => {
         createChainFromSkeleton(40);
         drawChain3D(true);
     }
+
+    if (e.key.toLowerCase() === 'q' && !e.repeat) {
+        drawChains3DForAllBranches(40);
+    }
 });
 
 document.addEventListener('keyup', (e) => {
@@ -554,5 +564,6 @@ window.appActions = {
     copyPreviousFrameSkeleton,
     drawSkeleton3D,
     drawChain3D,
+    drawChains3DForAllBranches,
     connectBranches
 };

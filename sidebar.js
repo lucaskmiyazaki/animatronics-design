@@ -35,8 +35,7 @@ updateModeButton();
 
 const buildButton = createButton('Build Chain', () => {
     window.appActions?.createChainFromSkeleton(40);
-    window.appActions?.drawChain3D(true);
-
+    window.appActions?.drawChains3DForAllBranches(40);
 });
 
 const previewButton = createButton('Preview', () => {

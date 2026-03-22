@@ -163,6 +163,31 @@ class Chain3DView {
             this.view.hasFittedOnce = true;
         }
     }
+
+    drawChainsForSkeleton(skeleton, diameter = 20, options = {}) {
+        const { fitView = false } = options;
+
+        this.clearChain();
+
+        if (!skeleton || !skeleton.branches || skeleton.branches.length === 0) return;
+
+        skeleton.branches.forEach(branch => {
+            if (!branch || !branch.points || branch.points.length < 2) return;
+
+            const tempChain = new Chain();
+            tempChain.buildFromSkeleton(branch, diameter);
+
+            tempChain.getLinks().forEach(link => {
+                const mesh = this.createSquareLoftMesh(link);
+                this.group.add(mesh);
+            });
+        });
+
+        if (fitView || !this.view.hasFittedOnce) {
+            this.view.fitCameraToObject(this.group);
+            this.view.hasFittedOnce = true;
+        }
+    }
 }
 
 window.chain3DView = new Chain3DView(window.skeleton3DView.view);
