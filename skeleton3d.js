@@ -15,35 +15,93 @@ class Skeleton3DView {
 
         this.clearSkeleton();
 
-        if (!skeleton || skeleton.points.length === 0) return;
+        if (!skeleton) return;
 
         const pointGeometry = new THREE.SphereGeometry(5, 16, 16);
 
-        skeleton.points.forEach(point => {
+        // Support both old flat structure and new branch structure
+        if (skeleton.branches && skeleton.branches.length > 0) {
+            // New structure: branches with points and lines
             const pointMaterial = new THREE.MeshStandardMaterial({ color: 0xff3333 });
-            const sphere = new THREE.Mesh(pointGeometry, pointMaterial);
-            sphere.position.set(point.x, point.y, point.z ?? 0);
-            this.group.add(sphere);
-        });
+            const lineMaterial = new THREE.LineBasicMaterial({ color: 0x3366ff });
 
-        skeleton.lines.forEach(line => {
-            const start = new THREE.Vector3(
-                line.start.x,
-                line.start.y,
-                line.start.z ?? 0
-            );
+            skeleton.branches.forEach(branch => {
+                if (branch.points && branch.points.length > 0) {
+                    branch.points.forEach(point => {
+                        const sphere = new THREE.Mesh(pointGeometry, pointMaterial);
+                        sphere.position.set(point.x, point.y, point.z ?? 0);
+                        this.group.add(sphere);
+                    });
+                }
 
-            const end = new THREE.Vector3(
-                line.end.x,
-                line.end.y,
-                line.end.z ?? 0
-            );
+                if (branch.lines && branch.lines.length > 0) {
+                    branch.lines.forEach(line => {
+                        const start = new THREE.Vector3(
+                            line.start.x,
+                            line.start.y,
+                            line.start.z ?? 0
+                        );
 
-            const geometry = new THREE.BufferGeometry().setFromPoints([start, end]);
-            const material = new THREE.LineBasicMaterial({ color: 0x3366ff });
-            const mesh = new THREE.Line(geometry, material);
-            this.group.add(mesh);
-        });
+                        const end = new THREE.Vector3(
+                            line.end.x,
+                            line.end.y,
+                            line.end.z ?? 0
+                        );
+
+                        const geometry = new THREE.BufferGeometry().setFromPoints([start, end]);
+                        const mesh = new THREE.Line(geometry, lineMaterial);
+                        this.group.add(mesh);
+                    });
+                }
+            });
+
+            // Draw connections if present
+            if (skeleton.connections && skeleton.connections.length > 0) {
+                const connectionMaterial = new THREE.LineBasicMaterial({ color: 0x9933ff, linewidth: 1 });
+                skeleton.connections.forEach(conn => {
+                    if (conn.proj) {
+                        const start = new THREE.Vector3(
+                            skeleton.branches[conn.fromBranch].points[0].x,
+                            skeleton.branches[conn.fromBranch].points[0].y,
+                            skeleton.branches[conn.fromBranch].points[0].z ?? 0
+                        );
+
+                        const end = new THREE.Vector3(conn.proj.x, conn.proj.y, conn.proj.z ?? 0);
+
+                        const geometry = new THREE.BufferGeometry().setFromPoints([start, end]);
+                        const mesh = new THREE.Line(geometry, connectionMaterial);
+                        this.group.add(mesh);
+                    }
+                });
+            }
+        } else if (skeleton.points && skeleton.points.length > 0) {
+            // Old flat structure for backward compatibility
+            skeleton.points.forEach(point => {
+                const pointMaterial = new THREE.MeshStandardMaterial({ color: 0xff3333 });
+                const sphere = new THREE.Mesh(pointGeometry, pointMaterial);
+                sphere.position.set(point.x, point.y, point.z ?? 0);
+                this.group.add(sphere);
+            });
+
+            skeleton.lines.forEach(line => {
+                const start = new THREE.Vector3(
+                    line.start.x,
+                    line.start.y,
+                    line.start.z ?? 0
+                );
+
+                const end = new THREE.Vector3(
+                    line.end.x,
+                    line.end.y,
+                    line.end.z ?? 0
+                );
+
+                const geometry = new THREE.BufferGeometry().setFromPoints([start, end]);
+                const material = new THREE.LineBasicMaterial({ color: 0x3366ff });
+                const mesh = new THREE.Line(geometry, material);
+                this.group.add(mesh);
+            });
+        }
 
         if (fitView || !this.view.hasFittedOnce) {
             this.view.fitCameraToObject(this.group);
