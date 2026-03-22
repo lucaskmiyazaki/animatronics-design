@@ -61,7 +61,6 @@ class Branch {
 
     updatePoint(point, x, y, z = point.z, skeleton = null) {
         const oldX = point.x, oldY = point.y, oldZ = point.z ?? 0;
-        console.log('updatePoint called - skeleton passed?', !!skeleton, 'point has', point.lines.length, 'lines');
         point.x = x;
         point.y = y;
         point.z = z;
@@ -71,10 +70,7 @@ class Branch {
             
             // Move any branches connected to this line when in edit mode
             if (skeleton) {
-                console.log('updatePoint calling _moveLinkedBranches for line with offset', x - oldX, y - oldY, (z ?? 0) - oldZ);
                 this._moveLinkedBranches(skeleton, line, x - oldX, y - oldY, (z ?? 0) - oldZ);
-            } else {
-                console.log('updatePoint: skeleton is null, skipping _moveLinkedBranches');
             }
         });
     }
@@ -281,33 +277,21 @@ class Branch {
 
     _moveLinkedBranches(skeleton, line, dx, dy, dz) {
         if (!skeleton || !skeleton.connections) {
-            console.log('_moveLinkedBranches: no skeleton or connections');
             return;
         }
 
         const branchIndex = skeleton.branches.indexOf(this);
-        console.log('_moveLinkedBranches - current branch index:', branchIndex);
-        console.log('_moveLinkedBranches - total branches:', skeleton.branches.length);
-        console.log('_moveLinkedBranches - total connections:', skeleton.connections.length);
-        
         if (branchIndex === -1) {
-            console.log('_moveLinkedBranches: branch not found in skeleton');
             return;
         }
         const lineIndex = this.lines.indexOf(line);
         if (lineIndex === -1) {
-            console.log('_moveLinkedBranches: line not found in branch');
             return;
         }
 
-        console.log('_moveLinkedBranches - looking for connections where toBranch=' + branchIndex + ', lineIndex=' + lineIndex);
-        console.log('_moveLinkedBranches - total connections to check:', skeleton.connections.length);
-
         // Find all branches connected to this line
-        skeleton.connections.forEach((conn, idx) => {
-            console.log('  [' + idx + '] checking connection: fromBranch=' + conn.fromBranch + ', toBranch=' + conn.toBranch + ', lineIndex=' + conn.lineIndex);
+        skeleton.connections.forEach((conn) => {
             if (conn.toBranch === branchIndex && conn.lineIndex === lineIndex) {
-                console.log('  ✓ MATCH! Moving linked branch', conn.fromBranch);
                 const linkedBranch = skeleton.branches[conn.fromBranch];
                 if (linkedBranch && linkedBranch.points.length > 0) {
                     // Calculate new projection point on the line at parameter t
@@ -326,17 +310,12 @@ class Branch {
                     const offsetY = newProj.y - firstPoint.y;
                     const offsetZ = newProj.z - (firstPoint.z ?? 0);
 
-                    console.log('    firstPoint:', firstPoint.x, firstPoint.y, firstPoint.z);
-                    console.log('    newProj:', newProj.x, newProj.y, newProj.z);
-                    console.log('    offset:', offsetX, offsetY, offsetZ);
-
                     // Move all points in the linked branch to maintain relative position
                     linkedBranch.points.forEach(p => {
                         p.x += offsetX;
                         p.y += offsetY;
                         p.z = (p.z ?? 0) + offsetZ;
                     });
-                    console.log('    moved', linkedBranch.points.length, 'points');
                     linkedBranch.updateAllGeometry();
                     skeleton.updateConnections();
                 }
@@ -696,17 +675,14 @@ class Skeleton {
         const a = typeof branchA === 'number' ? this.branches[branchA] : branchA;
         const b = typeof branchB === 'number' ? this.branches[branchB] : branchB;
         if (!a || !b) {
-            console.log('connectFirstPointToLine: a or b not found');
             return null;
         }
         if (!a.points || a.points.length === 0) {
-            console.log('connectFirstPointToLine: a has no points');
             return null;
         }
         const p = a.points[0];
         const line = b.lines[lineIndex];
         if (!line) {
-            console.log('connectFirstPointToLine: line not found at index', lineIndex);
             return null;
         }
 
@@ -722,7 +698,6 @@ class Skeleton {
 
         const conn = { fromBranch: this.branches.indexOf(a), toBranch: this.branches.indexOf(b), lineIndex, t, proj };
         this.connections.push(conn);
-        console.log('connectFirstPointToLine: created connection', conn);
         return conn;
     }
 

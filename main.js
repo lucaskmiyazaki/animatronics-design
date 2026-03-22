@@ -312,7 +312,6 @@ canvas.addEventListener('click', (e) => {
         const newBranchIndex = skeleton.branches.indexOf(newBranch);
         if (lineBranchIndex !== -1 && lineIndexInBranch !== -1) {
             skeleton.connectFirstPointToLine(newBranchIndex, lineBranchIndex, lineIndexInBranch);
-            console.log('Created connection between branch', newBranchIndex, 'and line', lineIndexInBranch, 'of branch', lineBranchIndex);
         }
 
         // switch to the new branch and enter create mode
@@ -331,23 +330,14 @@ canvas.addEventListener('mousedown', (e) => {
     const skeleton = getCurrentSkeleton();
     let clickedPoint = getPointAt(x, y);
 
-    console.log('mousedown - clicked point:', clickedPoint);
-    console.log('skeleton:', skeleton);
-    console.log('skeleton.branches:', skeleton?.branches);
-    console.log('skeleton.connections:', skeleton?.connections);
-
     // In move mode, prevent dragging the first point of a linked branch
     if (mode === 'move' && clickedPoint && skeleton && skeleton.branches) {
         const branchIndex = skeleton.branches.findIndex(b => b && b.points && b.points[0] === clickedPoint);
-        console.log('branchIndex of clicked point:', branchIndex);
-        console.log('is first point of branch?:', branchIndex !== -1);
         
         if (branchIndex !== -1 && skeleton.connections) {
             const linkedConnections = skeleton.connections.filter(conn => conn.fromBranch === branchIndex);
-            console.log('connections for this branch:', linkedConnections);
             
             if (linkedConnections.length > 0) {
-                console.log('Point is linked, preventing drag');
                 clickedPoint = null;
             }
         }
@@ -549,7 +539,6 @@ function connectBranches(branchAIndex, branchBIndex, lineIndex) {
     const skeleton = getCurrentSkeleton();
     if (!skeleton) return null;
     const conn = skeleton.connectFirstPointToLine(branchAIndex, branchBIndex, lineIndex);
-    console.log('connectBranches called:', { branchAIndex, branchBIndex, lineIndex, result: conn });
     redrawAll();
     return conn;
 }
