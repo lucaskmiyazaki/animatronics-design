@@ -358,7 +358,7 @@ class Chain {
         };
     }
 
-    buildFromSkeleton(skeleton, diameter = 20) {
+    buildFromSkeleton(skeleton) {
         this.clear();
 
         if (!skeleton || skeleton.points.length < 2) {

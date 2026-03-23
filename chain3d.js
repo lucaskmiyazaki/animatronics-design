@@ -6,6 +6,11 @@ import {
 import { STLExporter } from 'https://esm.sh/three@0.160.0/examples/jsm/exporters/STLExporter.js';
 import { CSG } from 'https://esm.sh/three-csg-ts';
 
+const capThickness = 10;
+const joinEps = 0.5;
+const holeRadiusEps = 0.2;
+const holeDepthEps = 10.0;
+
 class Chain3DView {
     constructor(sharedView) {
         this.view = sharedView;
@@ -304,7 +309,7 @@ class Chain3DView {
         const topCenter = this.vec3(link.getTopCenter());
 
         const axis = topCenter.clone().sub(bottomCenter);
-        const height = axis.length();
+        const height = axis.length() + holeDepthEps; // Add a small offset to ensure the hole extends slightly beyond the link
 
         if (height < 1e-8) return null;
 
@@ -396,7 +401,6 @@ class Chain3DView {
         const inwardDir = topCenter.clone().sub(bottomCenter).normalize();
         const sign = bottomNormal.dot(inwardDir) >= 0 ? 1 : -1;
 
-        const joinEps = 0.5;
         const inwardOffset = bottomNormal.clone().multiplyScalar(sign * (thickness * 0.5 + joinEps));
         cylinder.position.copy(bottomCenter).add(inwardOffset);
 
@@ -428,7 +432,6 @@ class Chain3DView {
         const inwardDir = bottomCenter.clone().sub(topCenter).normalize();
         const sign = topNormal.dot(inwardDir) >= 0 ? 1 : -1;
 
-        const joinEps = 0.5;
         const inwardOffset = topNormal.clone().multiplyScalar(sign * (thickness * 0.5 + joinEps));
         cylinder.position.copy(topCenter).add(inwardOffset);
 
@@ -446,10 +449,6 @@ class Chain3DView {
         const meshMap = new Map();
         const consumedKeys = new Set();
         const finalMeshes = [];
-        const capThickness = 10;
-        const joinEps = 0.5;
-        const holeRadiusEps = 0.2;
-        const holeDepthEps = 1.0;
 
         // 1) Build each link mesh already merged with its point cap cylinder(s)
         skeleton.branches.forEach((branch, branchIndex) => {
@@ -541,13 +540,88 @@ class Chain3DView {
                 return;
             }
 
-            let mergedMesh = this.mergeMeshes([childMesh, parentMesh]);
+            const childLink = childMesh.userData.link;
+const parentLink = parentMesh.userData.link;
 
-            mergedMesh = this.subtractHolesFromMesh(
-                mergedMesh,
-                [childMesh.userData.link, parentMesh.userData.link],
-                0.2
-            );
+const childBottomCenter = this.vec3(childLink.getBottomCenter());
+const childTopCenter = this.vec3(childLink.getTopCenter());
+const parentBottomCenter = this.vec3(parentLink.getBottomCenter());
+const parentTopCenter = this.vec3(parentLink.getTopCenter());
+
+const childBottomNormal = this.vec3(childLink.getBottomNormal()).normalize();
+const childTopNormal = this.vec3(childLink.getTopNormal()).normalize();
+const parentBottomNormal = this.vec3(parentLink.getBottomNormal()).normalize();
+const parentTopNormal = this.vec3(parentLink.getTopNormal()).normalize();
+
+const childDir = childTopCenter.clone().sub(childBottomCenter).normalize();
+const parentDir = parentTopCenter.clone().sub(parentBottomCenter).normalize();
+
+const dot = Math.max(-1, Math.min(1, childDir.dot(parentDir)));
+const angleDeg = Math.acos(dot) * 180 / Math.PI;
+
+console.log('[connection debug] child link', {
+    bottomCenter: childBottomCenter,
+    topCenter: childTopCenter,
+    bottomNormal: childBottomNormal,
+    topNormal: childTopNormal,
+    diameter: childLink.diameter
+});
+
+console.log('[connection debug] parent link', {
+    bottomCenter: parentBottomCenter,
+    topCenter: parentTopCenter,
+    bottomNormal: parentBottomNormal,
+    topNormal: parentTopNormal,
+    diameter: parentLink.diameter
+});
+
+console.log('[connection debug] angleDeg', angleDeg);
+let mergedMesh;
+try {
+    mergedMesh = this.mergeMeshes([childMesh, parentMesh]);
+    console.log('[build] connection merge OK', {
+        connIndex,
+        childKey,
+        parentKey
+    });
+} catch (err) {
+    console.error('[build] connection merge FAILED', {
+        connIndex,
+        childKey,
+        parentKey,
+        err,
+        childMesh,
+        parentMesh
+    });
+    throw err;
+}
+
+            console.log('[build] connection hole subtraction START', {
+    connIndex,
+    childKey,
+    parentKey
+});
+try {
+    mergedMesh = this.subtractHolesFromMesh(
+        mergedMesh,
+        [childMesh.userData.link, parentMesh.userData.link],
+        0.2
+    );
+    console.log('[build] connection hole subtraction OK', {
+        connIndex,
+        childKey,
+        parentKey
+    });
+} catch (err) {
+    console.error('[build] connection hole subtraction FAILED', {
+        connIndex,
+        childKey,
+        parentKey,
+        err,
+        links: [childMesh.userData.link, parentMesh.userData.link]
+    });
+    throw err;
+}
 
             mergedMesh.userData.mergedConnection = {
                 connectionIndex: connIndex,
