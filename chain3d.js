@@ -372,7 +372,7 @@ class Chain3DView {
         return result;
     }
 
-        createDebugCylinderAtPoint(link, pointDiameter = 50, thickness = 10) {
+    createPointCapCylinder(link, pointDiameter = 50, thickness = 10) {
         if (!link) return null;
 
         const bottomCenter = this.vec3(link.getBottomCenter());
@@ -403,78 +403,38 @@ class Chain3DView {
         return cylinder;
     }
 
-    drawDebugPointCylindersForSkeleton(skeleton, diameter = 50, thickness = 10) {
-        if (!this.debugPointCylinderGroup) {
-            this.debugPointCylinderGroup = this.view.getOrCreateGroup('debugPointCylinderGroup');
-        }
+    createEndPointCapCylinder(link, pointDiameter = 50, thickness = 10) {
+        if (!link) return null;
 
-        this.view.clearGroup(this.debugPointCylinderGroup);
+        const bottomCenter = this.vec3(link.getBottomCenter());
+        const topCenter = this.vec3(link.getTopCenter());
+        const topNormal = this.vec3(link.getTopNormal()).clone().normalize();
 
-        if (!skeleton || !skeleton.branches || skeleton.branches.length === 0) return;
+        const radius = pointDiameter / 2;
 
-        skeleton.branches.forEach((branch) => {
-            if (!branch || !branch.points || branch.points.length < 2) return;
-
-            const tempChain = new Chain();
-            tempChain.buildFromSkeleton(branch, diameter);
-
-            const links = tempChain.getLinks();
-
-            links.forEach((link, linkIndex) => {
-                const startPoint = branch.points[linkIndex];
-                const startDiameter = startPoint?.diameter ?? diameter;
-
-                const startCylinder = this.createDebugCylinderAtPoint(
-                    link,
-                    startDiameter,
-                    thickness
-                );
-
-                if (startCylinder) {
-                    this.debugPointCylinderGroup.add(startCylinder);
-                }
-
-                const isLastLink = linkIndex === links.length - 1;
-                if (isLastLink) {
-                    const endPoint = branch.points[linkIndex + 1];
-                    const endDiameter = endPoint?.diameter ?? diameter;
-                    const endRadius = endDiameter / 2;
-
-                    const bottomCenter = this.vec3(link.getBottomCenter());
-                    const topCenter = this.vec3(link.getTopCenter());
-                    const topNormal = this.vec3(link.getTopNormal()).clone().normalize();
-
-                    const geometry = new THREE.CylinderGeometry(endRadius, endRadius, thickness, 24);
-                    const material = new THREE.MeshStandardMaterial({
-                        color: 0xff0000,
-                        side: THREE.DoubleSide
-                    });
-
-                    const endCylinder = new THREE.Mesh(geometry, material);
-
-                    const yAxis = new THREE.Vector3(0, 1, 0);
-                    const quat = new THREE.Quaternion().setFromUnitVectors(yAxis, topNormal);
-                    endCylinder.quaternion.copy(quat);
-
-                    const inwardDir = bottomCenter.clone().sub(topCenter).normalize();
-                    const sign = topNormal.dot(inwardDir) >= 0 ? 1 : -1;
-
-                    const inwardOffset = topNormal.clone().multiplyScalar(sign * thickness * 0.5);
-                    endCylinder.position.copy(topCenter).add(inwardOffset);
-
-                    endCylinder.updateMatrixWorld(true);
-                    this.debugPointCylinderGroup.add(endCylinder);
-                }
-            });
+        const geometry = new THREE.CylinderGeometry(radius, radius, thickness, 24);
+        const material = new THREE.MeshStandardMaterial({
+            color: 0xff0000,
+            side: THREE.DoubleSide
         });
 
-        if (!this.view.hasFittedOnce) {
-            this.view.fitCameraToObject(this.debugPointCylinderGroup);
-            this.view.hasFittedOnce = true;
-        }
+        const cylinder = new THREE.Mesh(geometry, material);
+
+        const yAxis = new THREE.Vector3(0, 1, 0);
+        const quat = new THREE.Quaternion().setFromUnitVectors(yAxis, topNormal);
+        cylinder.quaternion.copy(quat);
+
+        const inwardDir = bottomCenter.clone().sub(topCenter).normalize();
+        const sign = topNormal.dot(inwardDir) >= 0 ? 1 : -1;
+
+        const inwardOffset = topNormal.clone().multiplyScalar(sign * thickness * 0.5);
+        cylinder.position.copy(topCenter).add(inwardOffset);
+
+        cylinder.updateMatrixWorld(true);
+        return cylinder;
     }
 
-    drawChainsForSkeleton(skeleton, diameter = 20, options = {}) {
+        drawChainsForSkeleton(skeleton, diameter = 20, options = {}) {
         const { fitView = false } = options;
 
         this.clearChain();
@@ -484,25 +444,59 @@ class Chain3DView {
         const meshMap = new Map();
         const consumedKeys = new Set();
         const finalMeshes = [];
+        const capThickness = 10;
 
-        // 1) Build all solid link meshes first
+        // 1) Build each link mesh already merged with its point cap cylinder(s)
         skeleton.branches.forEach((branch, branchIndex) => {
             if (!branch || !branch.points || branch.points.length < 2) return;
 
             const tempChain = new Chain();
             tempChain.buildFromSkeleton(branch, diameter);
 
-            tempChain.getLinks().forEach((link, linkIndex) => {
-                const mesh = this.createSquareLoftMesh(link);
+            const links = tempChain.getLinks();
 
-                mesh.userData.branchIndex = branchIndex;
-                mesh.userData.linkIndex = linkIndex;
-                mesh.userData.link = link;
+            links.forEach((link, linkIndex) => {
+                const parts = [];
 
-                this.meshes.push(mesh);
+                const loftMesh = this.createSquareLoftMesh(link);
+                parts.push(loftMesh);
+
+                const startPoint = branch.points[linkIndex];
+                const startDiameter = startPoint?.diameter ?? diameter;
+                const startCylinder = this.createPointCapCylinder(
+                    link,
+                    startDiameter,
+                    capThickness
+                );
+
+                if (startCylinder) {
+                    parts.push(startCylinder);
+                }
+
+                const isLastLink = linkIndex === links.length - 1;
+                if (isLastLink) {
+                    const endPoint = branch.points[linkIndex + 1];
+                    const endDiameter = endPoint?.diameter ?? diameter;
+                    const endCylinder = this.createEndPointCapCylinder(
+                        link,
+                        endDiameter,
+                        capThickness
+                    );
+
+                    if (endCylinder) {
+                        parts.push(endCylinder);
+                    }
+                }
+
+                let mergedLinkMesh = this.mergeMeshes(parts);
+                mergedLinkMesh.userData.branchIndex = branchIndex;
+                mergedLinkMesh.userData.linkIndex = linkIndex;
+                mergedLinkMesh.userData.link = link;
+
+                this.meshes.push(mergedLinkMesh);
 
                 const key = `${branchIndex}:${linkIndex}`;
-                meshMap.set(key, mesh);
+                meshMap.set(key, mergedLinkMesh);
             });
         });
 
