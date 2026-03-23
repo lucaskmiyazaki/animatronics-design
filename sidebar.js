@@ -76,6 +76,14 @@ const clearButton = createButton('Clear', () => {
     window.appActions?.clearCurrentFrameSkeleton?.();
 });
 
+const saveSkeletonButton = createButton('Save Skeleton', () => {
+    window.appActions?.downloadSkeletonTxt?.('my-skeleton.txt');
+});
+
+const loadSkeletonButton = createButton('Load Skeleton', () => {
+    window.appActions?.loadSkeletonFromFile?.();
+});
+
 // Add buttons to sidebar
 sidebar.append(
     modeButton,
@@ -87,7 +95,9 @@ sidebar.append(
     buildButton,
     downloadSTLButton,
     clearButton,
-    undoButton
+    undoButton,
+    saveSkeletonButton,
+    loadSkeletonButton
 );
 
 // Add sidebar to page

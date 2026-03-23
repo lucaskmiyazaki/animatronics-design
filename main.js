@@ -899,6 +899,158 @@ function connectBranches(branchAIndex, branchBIndex, lineIndex) {
     return conn;
 }
 
+function skeletonToSerializableData(skeleton) {
+    return {
+        branches: skeleton.branches.map(branch => ({
+            points: branch.points.map(point => ({
+                x: point.x,
+                y: point.y,
+                z: point.z ?? 0,
+                diameter: point.diameter ?? 10
+            })),
+            lines: branch.lines.map(line => ({
+                start: branch.points.indexOf(line.start),
+                end: branch.points.indexOf(line.end)
+            }))
+        })),
+        connections: (skeleton.connections || []).map(conn => ({
+            fromBranch: conn.fromBranch,
+            toBranch: conn.toBranch,
+            lineIndex: conn.lineIndex,
+            t: conn.t
+        })),
+        mirrors: (skeleton.mirrors || []).map(m => ({
+            sourceBranch: m.sourceBranch,
+            mirrorBranch: m.mirrorBranch
+        }))
+    };
+}
+
+function downloadSkeletonTxt(filename = 'skeleton.txt') {
+    console.log("Initiating skeleton data download...");
+    const skeleton = getCurrentSkeleton();
+    if (!skeleton) {
+        alert('No skeleton data to download for current frame');
+        return;
+    }
+    const data = skeletonToSerializableData(skeleton);
+    console.log('Downloading skeleton data:', data);
+    const text = JSON.stringify(data, null, 2);
+
+    const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+
+    URL.revokeObjectURL(url);
+}
+
+function loadSkeletonFromData(data) {
+    const skeleton = new Skeleton();
+
+    if (!data || !data.branches) return;
+
+    data.branches.forEach(branchData => {
+        const branch = skeleton.addBranch();
+
+        (branchData.points || []).forEach(p => {
+            const point = branch.addPoint(p.x, p.y, p.z ?? 0);
+            point.diameter = p.diameter ?? 10;
+        });
+
+        (branchData.lines || []).forEach(l => {
+            const p1 = branch.points[l.start];
+            const p2 = branch.points[l.end];
+
+            if (p1 && p2) {
+                branch.addLine(p1, p2);
+            }
+        });
+    });
+
+    skeleton.connections = (data.connections || []).map(conn => ({
+        fromBranch: conn.fromBranch,
+        toBranch: conn.toBranch,
+        lineIndex: conn.lineIndex,
+        t: conn.t,
+        proj: null
+    }));
+
+    skeleton.mirrors = (data.mirrors || []).map(m => ({
+        sourceBranch: m.sourceBranch,
+        mirrorBranch: m.mirrorBranch
+    }));
+
+    if (typeof skeleton.updateConnections === 'function') {
+        skeleton.updateConnections();
+    }
+
+    frameSkeletons[currentFrameIndex] = skeleton;
+
+    hoveredPoint = null;
+    hoveredLine = null;
+    draggedPoint = null;
+    mouseDownDraggedPoint = null;
+    dragStartMouse = null;
+    dragStartPoint = null;
+    isZDragging = false;
+    currentBranch = 0;
+
+    chain.clear();
+    redrawAll();
+    drawSkeleton3D();
+
+    return;
+}
+
+function loadSkeletonFromFile() {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.txt,.json';
+
+    input.addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+
+        reader.onload = function (event) {
+            try {
+                const data = JSON.parse(event.target.result);
+                const loadedSkeleton = loadSkeletonFromData(data);
+
+                if (window.appActions?.setSkeleton) {
+                    window.appActions.setSkeleton(loadedSkeleton);
+                } else {
+                    window.skeleton = loadedSkeleton;
+                }
+
+                if (window.appActions?.drawSkeleton3D) {
+                    window.appActions.drawSkeleton3D();
+                }
+
+                if (window.draw) {
+                    window.draw();
+                }
+
+                console.log('Skeleton loaded successfully');
+            } catch (err) {
+                console.error('Failed to load skeleton:', err);
+                alert('Failed to load skeleton file');
+            }
+        };
+
+        reader.readAsText(file);
+    });
+
+    input.click();
+}
+
 window.appActions = {
     toggleMode,
     getMode,
@@ -914,4 +1066,6 @@ window.appActions = {
     connectBranches,
     undoLastAction,
     clearCurrentFrameSkeleton,
+    downloadSkeletonTxt,
+    loadSkeletonFromFile
 };
