@@ -821,7 +821,44 @@ class Skeleton {
             mirrorBranch: mirrorBranchIndex
         });
 
+        this.syncMirrorConnection(branchIndex, mirrorBranchIndex);
         return mirrorBranchIndex;
+    }
+
+    syncMirrorConnection(sourceBranchIndex, mirrorBranchIndex) {
+        if (!this.connections) {
+            this.connections = [];
+        }
+
+        // remove old connections where mirror branch is the child
+        this.connections = this.connections.filter(
+            conn => conn.fromBranch !== mirrorBranchIndex
+        );
+
+        // copy every parent connection from source -> mirror
+        const sourceConnections = this.connections.filter(
+            conn => conn.fromBranch === sourceBranchIndex
+        );
+
+        sourceConnections.forEach(conn => {
+            this.connections.push({
+                fromBranch: mirrorBranchIndex,
+                toBranch: conn.toBranch,
+                lineIndex: conn.lineIndex,
+                t: conn.t,
+                proj: conn.proj
+                    ? {
+                        x: conn.proj.x,
+                        y: conn.proj.y,
+                        z: conn.proj.z ?? 0
+                    }
+                    : null
+            });
+        });
+
+        if (typeof this.updateConnections === 'function') {
+            this.updateConnections();
+        }
     }
 
     syncMirrorBranch(sourceBranchIndex) {
@@ -871,6 +908,7 @@ class Skeleton {
             );
         }
 
+        this.syncMirrorConnection(sourceBranchIndex, pair.mirrorBranch);
         return pair.mirrorBranch;
     }
 
