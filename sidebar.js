@@ -69,6 +69,14 @@ const downloadSTLButton = createButton('Download STL', () => {
     window.chain3DView?.downloadFinalMeshesAsSTL?.();
 });
 
+const undoButton = createButton('Undo', () => {
+    window.appActions?.undoLastAction?.();
+});
+
+const clearButton = createButton('Clear', () => {
+    window.appActions?.clearCurrentFrameSkeleton?.();
+});
+
 // Add buttons to sidebar
 sidebar.append(
     modeButton,
@@ -79,6 +87,8 @@ sidebar.append(
     renderSkeletonButton,
     buildButton,
     downloadSTLButton,
+    clearButton,
+    undoButton
 );
 
 // Add sidebar to page

@@ -277,6 +277,27 @@ class Branch {
         // 3+ connected lines: not handled yet
     }
 
+    removeLastPoint() {
+        if (!this.points || this.points.length === 0) return null;
+
+        const lastPoint = this.points[this.points.length - 1];
+
+        // remove connected lines from this branch
+        this.lines = this.lines.filter(line => {
+            const usesPoint = line.start === lastPoint || line.end === lastPoint;
+
+            if (usesPoint) {
+                line.start.lines = line.start.lines.filter(l => l !== line);
+                line.end.lines = line.end.lines.filter(l => l !== line);
+            }
+
+            return !usesPoint;
+        });
+
+        this.points.pop();
+        return lastPoint;
+    }
+
     _moveLinkedBranches(skeleton, line, dx, dy, dz) {
         if (!skeleton || !skeleton.connections) {
             return;
@@ -670,6 +691,33 @@ class Skeleton {
         const b = new Branch();
         this.branches.push(b);
         return b;
+    }
+
+    removeBranch(branchIndex) {
+        if (
+            branchIndex < 0 ||
+            branchIndex >= this.branches.length
+        ) {
+            return false;
+        }
+
+        this.branches.splice(branchIndex, 1);
+
+        // remove connections involving this branch
+        this.connections = this.connections
+            .filter(conn => conn.fromBranch !== branchIndex && conn.toBranch !== branchIndex)
+            .map(conn => ({
+                ...conn,
+                fromBranch: conn.fromBranch > branchIndex ? conn.fromBranch - 1 : conn.fromBranch,
+                toBranch: conn.toBranch > branchIndex ? conn.toBranch - 1 : conn.toBranch
+            }));
+
+        return true;
+    }
+
+    clear() {
+        this.branches = [];
+        this.connections = [];
     }
 
     // Connect the first point (index 0) of branchA to a line of branchB and store projection.

@@ -757,6 +757,61 @@ function copyPreviousFrameSkeleton() {
     redrawAll();
 }
 
+function undoLastAction() {
+    const skeleton = getCurrentSkeleton();
+    if (!skeleton || !skeleton.branches || skeleton.branches.length === 0) return;
+
+    let branch = skeleton.branches[currentBranch];
+
+    // fallback to last existing branch if currentBranch is invalid
+    if (!branch) {
+        currentBranch = skeleton.branches.length - 1;
+        branch = skeleton.branches[currentBranch];
+    }
+
+    if (!branch) return;
+
+    // remove last point from current branch
+    if (branch.points && branch.points.length > 0) {
+        branch.removeLastPoint();
+
+        // if branch became empty, remove it entirely
+        if (branch.points.length === 0) {
+            skeleton.removeBranch(currentBranch);
+            currentBranch = Math.max(0, Math.min(currentBranch - 1, skeleton.branches.length - 1));
+        }
+
+        chain.clear();
+        redrawAll();
+        return;
+    }
+
+    // if branch already empty, remove branch
+    skeleton.removeBranch(currentBranch);
+    currentBranch = Math.max(0, Math.min(currentBranch - 1, skeleton.branches.length - 1));
+
+    chain.clear();
+    redrawAll();
+}
+
+function clearCurrentFrameSkeleton() {
+    if (!frameSkeletons[currentFrameIndex]) return;
+
+    delete frameSkeletons[currentFrameIndex];
+
+    hoveredPoint = null;
+    hoveredLine = null;
+    draggedPoint = null;
+    mouseDownDraggedPoint = null;
+    dragStartMouse = null;
+    dragStartPoint = null;
+    isZDragging = false;
+    currentBranch = 0;
+
+    chain.clear();
+    redrawAll();
+}
+
 document.addEventListener('keydown', (e) => {
     if (e.key === 'Shift' && draggedPoint && (mode === 'edit' || mode === 'move')) {
         isZDragging = true;
@@ -804,4 +859,6 @@ window.appActions = {
     drawChains3DForAllBranches,
     connectBranches,
     drawDebugPointCylinders,
+    undoLastAction,
+    clearCurrentFrameSkeleton,
 };
