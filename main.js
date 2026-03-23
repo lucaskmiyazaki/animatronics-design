@@ -784,6 +784,12 @@ function connectBranches(branchAIndex, branchBIndex, lineIndex) {
     return conn;
 }
 
+function drawDebugPointCylinders() {
+    if (window.chain3DView) {
+        window.chain3DView.drawDebugPointCylindersForSkeleton(getCurrentSkeleton(), 50, 10);
+    }
+}
+
 window.appActions = {
     toggleMode,
     getMode,
@@ -796,5 +802,6 @@ window.appActions = {
     drawSkeleton3D,
     drawChain3D,
     drawChains3DForAllBranches,
-    connectBranches
+    connectBranches,
+    drawDebugPointCylinders,
 };

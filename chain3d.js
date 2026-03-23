@@ -372,6 +372,108 @@ class Chain3DView {
         return result;
     }
 
+        createDebugCylinderAtPoint(link, pointDiameter = 50, thickness = 10) {
+        if (!link) return null;
+
+        const bottomCenter = this.vec3(link.getBottomCenter());
+        const topCenter = this.vec3(link.getTopCenter());
+        const bottomNormal = this.vec3(link.getBottomNormal()).clone().normalize();
+
+        const radius = pointDiameter / 2;
+
+        const geometry = new THREE.CylinderGeometry(radius, radius, thickness, 24);
+        const material = new THREE.MeshStandardMaterial({
+            color: 0xff0000,
+            side: THREE.DoubleSide
+        });
+
+        const cylinder = new THREE.Mesh(geometry, material);
+
+        const yAxis = new THREE.Vector3(0, 1, 0);
+        const quat = new THREE.Quaternion().setFromUnitVectors(yAxis, bottomNormal);
+        cylinder.quaternion.copy(quat);
+
+        const inwardDir = topCenter.clone().sub(bottomCenter).normalize();
+        const sign = bottomNormal.dot(inwardDir) >= 0 ? 1 : -1;
+
+        const inwardOffset = bottomNormal.clone().multiplyScalar(sign * thickness * 0.5);
+        cylinder.position.copy(bottomCenter).add(inwardOffset);
+
+        cylinder.updateMatrixWorld(true);
+        return cylinder;
+    }
+
+    drawDebugPointCylindersForSkeleton(skeleton, diameter = 50, thickness = 10) {
+        if (!this.debugPointCylinderGroup) {
+            this.debugPointCylinderGroup = this.view.getOrCreateGroup('debugPointCylinderGroup');
+        }
+
+        this.view.clearGroup(this.debugPointCylinderGroup);
+
+        if (!skeleton || !skeleton.branches || skeleton.branches.length === 0) return;
+
+        skeleton.branches.forEach((branch) => {
+            if (!branch || !branch.points || branch.points.length < 2) return;
+
+            const tempChain = new Chain();
+            tempChain.buildFromSkeleton(branch, diameter);
+
+            const links = tempChain.getLinks();
+
+            links.forEach((link, linkIndex) => {
+                const startPoint = branch.points[linkIndex];
+                const startDiameter = startPoint?.diameter ?? diameter;
+
+                const startCylinder = this.createDebugCylinderAtPoint(
+                    link,
+                    startDiameter,
+                    thickness
+                );
+
+                if (startCylinder) {
+                    this.debugPointCylinderGroup.add(startCylinder);
+                }
+
+                const isLastLink = linkIndex === links.length - 1;
+                if (isLastLink) {
+                    const endPoint = branch.points[linkIndex + 1];
+                    const endDiameter = endPoint?.diameter ?? diameter;
+                    const endRadius = endDiameter / 2;
+
+                    const bottomCenter = this.vec3(link.getBottomCenter());
+                    const topCenter = this.vec3(link.getTopCenter());
+                    const topNormal = this.vec3(link.getTopNormal()).clone().normalize();
+
+                    const geometry = new THREE.CylinderGeometry(endRadius, endRadius, thickness, 24);
+                    const material = new THREE.MeshStandardMaterial({
+                        color: 0xff0000,
+                        side: THREE.DoubleSide
+                    });
+
+                    const endCylinder = new THREE.Mesh(geometry, material);
+
+                    const yAxis = new THREE.Vector3(0, 1, 0);
+                    const quat = new THREE.Quaternion().setFromUnitVectors(yAxis, topNormal);
+                    endCylinder.quaternion.copy(quat);
+
+                    const inwardDir = bottomCenter.clone().sub(topCenter).normalize();
+                    const sign = topNormal.dot(inwardDir) >= 0 ? 1 : -1;
+
+                    const inwardOffset = topNormal.clone().multiplyScalar(sign * thickness * 0.5);
+                    endCylinder.position.copy(topCenter).add(inwardOffset);
+
+                    endCylinder.updateMatrixWorld(true);
+                    this.debugPointCylinderGroup.add(endCylinder);
+                }
+            });
+        });
+
+        if (!this.view.hasFittedOnce) {
+            this.view.fitCameraToObject(this.debugPointCylinderGroup);
+            this.view.hasFittedOnce = true;
+        }
+    }
+
     drawChainsForSkeleton(skeleton, diameter = 20, options = {}) {
         const { fitView = false } = options;
 

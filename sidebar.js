@@ -40,6 +40,7 @@ updateModeButton();
 const buildButton = createButton('Build Chain', () => {
     window.appActions?.createChainFromSkeleton?.(40);
     window.appActions?.drawChains3DForAllBranches?.(40);
+    window.appActions?.drawDebugPointCylinders?.();
 });
 
 const uploadVideoButton = createButton('Upload Video', () => {
