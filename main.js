@@ -446,6 +446,7 @@ canvas.addEventListener('click', (e) => {
             if (branch.points.length > 1) {
                 branch.addLine(branch.points[branch.points.length - 2], newPoint);
             }
+            syncMirrorIfNeeded(branch);
 
         } else {
             console.error('[main.click] No valid skeleton or branches to add point to');
@@ -547,7 +548,6 @@ canvas.addEventListener('mousedown', (e) => {
             }
 
             generateMeshPolygonsForSkeleton(skeleton);
-            console.log('[mesh] selected point:', draggedPoint);
         }
 
         redrawAll();
@@ -632,7 +632,7 @@ canvas.addEventListener('mousemove', (e) => {
                         skeleton.updateConnections();
                     }
                 }
-
+                syncMirrorIfNeeded(owner);
                 chain.clear();
             } else if (mode === 'move') {
                 const owner = findOwnerForPoint(draggedPoint);
@@ -645,7 +645,7 @@ canvas.addEventListener('mousemove', (e) => {
                         owner.movePointXYLockedZ(draggedPoint, mouseX, mouseY, dragStartPoint ? dragStartPoint.z : (draggedPoint.z ?? 0), 0.2, skeleton);
                     }
                 }
-
+                syncMirrorIfNeeded(owner);
                 chain.clear();
             } else if (mode === 'mesh' && draggedPoint) {
                 const dx = mouseX - draggedPoint.x;
@@ -654,9 +654,8 @@ canvas.addEventListener('mousemove', (e) => {
 
                 const newDiameter = Math.max(2, dist * 2);
                 draggedPoint.diameter = newDiameter;
-
-                console.log('[mesh] updating diameter:', newDiameter);
-
+                const owner = findOwnerForPoint(draggedPoint);
+                syncMirrorIfNeeded(owner);
                 generateMeshPolygonsForSkeleton(skeleton);
             } 
         }
@@ -711,6 +710,24 @@ function findBranchIndexForLine(line) {
     }
 
     return -1;
+}
+
+function syncMirrorIfNeeded(branch) {
+    const skeleton = getCurrentSkeleton();
+    if (!skeleton || !branch) return;
+
+    const branchIndex = skeleton.branches.indexOf(branch);
+    if (branchIndex === -1) return;
+
+    // skip if this branch is itself a mirror
+    if (typeof skeleton.isMirrorBranch === 'function' &&
+        skeleton.isMirrorBranch(branchIndex)) {
+        return;
+    }
+
+    if (typeof skeleton.syncMirrorBranch === 'function') {
+        skeleton.syncMirrorBranch(branchIndex);
+    }
 }
 
 function cloneSkeleton(sourceSkeleton) {

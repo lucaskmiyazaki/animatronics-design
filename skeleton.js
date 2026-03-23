@@ -772,4 +772,110 @@ class Skeleton {
             conn.proj = b.add3(start, b.mul3(seg, t));
         });
     }
+
+    addMirrorBranch(branchIndex) {
+        if (!this.branches || branchIndex < 0 || branchIndex >= this.branches.length) {
+            return -1;
+        }
+
+        if (!this.mirrors) {
+            this.mirrors = [];
+        }
+
+        const alreadyMirrored = this.mirrors.find(
+            pair => pair.sourceBranch === branchIndex
+        );
+
+        if (alreadyMirrored) {
+            return alreadyMirrored.mirrorBranch;
+        }
+
+        const sourceBranch = this.branches[branchIndex];
+        if (!sourceBranch || !sourceBranch.points || sourceBranch.points.length === 0) {
+            return -1;
+        }
+
+        const mirrorBranch = this.addBranch();
+
+        sourceBranch.points.forEach(sourcePoint => {
+            const mirroredPoint = mirrorBranch.addPoint(
+                sourcePoint.x,
+                sourcePoint.y,
+                -(sourcePoint.z ?? 0)
+            );
+
+            mirroredPoint.diameter = sourcePoint.diameter;
+        });
+
+        for (let i = 1; i < mirrorBranch.points.length; i++) {
+            mirrorBranch.addLine(
+                mirrorBranch.points[i - 1],
+                mirrorBranch.points[i]
+            );
+        }
+
+        const mirrorBranchIndex = this.branches.indexOf(mirrorBranch);
+
+        this.mirrors.push({
+            sourceBranch: branchIndex,
+            mirrorBranch: mirrorBranchIndex
+        });
+
+        return mirrorBranchIndex;
+    }
+
+    syncMirrorBranch(sourceBranchIndex) {
+        if (!this.branches || !this.mirrors) return -1;
+        if (sourceBranchIndex < 0 || sourceBranchIndex >= this.branches.length) return -1;
+
+        const pair = this.mirrors.find(m => m.sourceBranch === sourceBranchIndex);
+        if (!pair) return -1;
+
+        const sourceBranch = this.branches[sourceBranchIndex];
+        const mirrorBranch = this.branches[pair.mirrorBranch];
+
+        if (!sourceBranch || !mirrorBranch) return -1;
+
+        // remove old lines from mirror points
+        if (mirrorBranch.lines) {
+            mirrorBranch.lines.forEach(line => {
+                if (line.start && line.start.lines) {
+                    line.start.lines = line.start.lines.filter(l => l !== line);
+                }
+                if (line.end && line.end.lines) {
+                    line.end.lines = line.end.lines.filter(l => l !== line);
+                }
+            });
+        }
+
+        // reset mirror branch geometry
+        mirrorBranch.points = [];
+        mirrorBranch.lines = [];
+
+        // rebuild mirrored points
+        sourceBranch.points.forEach(sourcePoint => {
+            const mirroredPoint = mirrorBranch.addPoint(
+                sourcePoint.x,
+                sourcePoint.y,
+                -(sourcePoint.z ?? 0)
+            );
+
+            mirroredPoint.diameter = sourcePoint.diameter;
+        });
+
+        // rebuild mirrored lines
+        for (let i = 1; i < mirrorBranch.points.length; i++) {
+            mirrorBranch.addLine(
+                mirrorBranch.points[i - 1],
+                mirrorBranch.points[i]
+            );
+        }
+
+        return pair.mirrorBranch;
+    }
+
+    isMirrorBranch(branchIndex) {
+        if (!this.mirrors) return false;
+        return this.mirrors.some(m => m.mirrorBranch === branchIndex);
+    }
 }
