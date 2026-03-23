@@ -513,131 +513,98 @@ class Chain3DView {
         // 2) Merge only exact connected pairs, then subtract holes
         console.log('Skeleton link connections:');
 
+        const connectionGroups = new Map();
+
         (skeleton.connections || []).forEach((conn, connIndex) => {
-            const childBranchIndex = conn.fromBranch;
-            const parentBranchIndex = conn.toBranch;
-            const parentLinkIndex = conn.lineIndex;
-            const childLinkIndex = 0;
+            const parentKey = `${conn.toBranch}:${conn.lineIndex}`;
+        
+            if (!connectionGroups.has(parentKey)) {
+                connectionGroups.set(parentKey, []);
+            }
+        
+            connectionGroups.get(parentKey).push({
+                conn,
+                connIndex,
+                childKey: `${conn.fromBranch}:0`,
+                parentKey
+            });
+        });
 
-            const childKey = `${childBranchIndex}:${childLinkIndex}`;
-            const parentKey = `${parentBranchIndex}:${parentLinkIndex}`;
-
-            const childMesh = meshMap.get(childKey);
+        connectionGroups.forEach((group, parentKey) => {
             const parentMesh = meshMap.get(parentKey);
-
-            console.log(
-                `[${connIndex}] B${childBranchIndex}-L${childLinkIndex} <-> B${parentBranchIndex}-L${parentLinkIndex}`,
-                conn
-            );
-
-            if (!childMesh || !parentMesh) {
-                console.warn(
-                    `Connection ${connIndex} could not be merged because one mesh was not found.`,
-                    { childKey, parentKey }
-                );
+                
+            if (!parentMesh) {
+                console.warn('Parent mesh not found for grouped connection merge', { parentKey, group });
                 return;
             }
-
-            if (consumedKeys.has(childKey) || consumedKeys.has(parentKey)) {
-                console.warn(
-                    `Connection ${connIndex} skipped because one of the links was already merged.`,
-                    { childKey, parentKey }
-                );
-                return;
+        
+            const meshesToMerge = [parentMesh];
+            const linksForHoles = [parentMesh.userData.link];
+            const mergedChildren = [];
+        
+            for (const item of group) {
+                const childMesh = meshMap.get(item.childKey);
+            
+                if (!childMesh) {
+                    console.warn('Child mesh not found for grouped connection merge', item);
+                    continue;
+                }
+            
+                if (consumedKeys.has(item.childKey)) {
+                    console.warn('Child already consumed in grouped merge', item);
+                    continue;
+                }
+            
+                meshesToMerge.push(childMesh);
+                linksForHoles.push(childMesh.userData.link);
+                mergedChildren.push(item.childKey);
             }
-
-            const childLink = childMesh.userData.link;
-const parentLink = parentMesh.userData.link;
-
-const childBottomCenter = this.vec3(childLink.getBottomCenter());
-const childTopCenter = this.vec3(childLink.getTopCenter());
-const parentBottomCenter = this.vec3(parentLink.getBottomCenter());
-const parentTopCenter = this.vec3(parentLink.getTopCenter());
-
-const childBottomNormal = this.vec3(childLink.getBottomNormal()).normalize();
-const childTopNormal = this.vec3(childLink.getTopNormal()).normalize();
-const parentBottomNormal = this.vec3(parentLink.getBottomNormal()).normalize();
-const parentTopNormal = this.vec3(parentLink.getTopNormal()).normalize();
-
-const childDir = childTopCenter.clone().sub(childBottomCenter).normalize();
-const parentDir = parentTopCenter.clone().sub(parentBottomCenter).normalize();
-
-const dot = Math.max(-1, Math.min(1, childDir.dot(parentDir)));
-const angleDeg = Math.acos(dot) * 180 / Math.PI;
-
-console.log('[connection debug] child link', {
-    bottomCenter: childBottomCenter,
-    topCenter: childTopCenter,
-    bottomNormal: childBottomNormal,
-    topNormal: childTopNormal,
-});
-
-console.log('[connection debug] parent link', {
-    bottomCenter: parentBottomCenter,
-    topCenter: parentTopCenter,
-    bottomNormal: parentBottomNormal,
-    topNormal: parentTopNormal,
-});
-
-console.log('[connection debug] angleDeg', angleDeg);
-let mergedMesh;
-try {
-    mergedMesh = this.mergeMeshes([childMesh, parentMesh]);
-    console.log('[build] connection merge OK', {
-        connIndex,
-        childKey,
-        parentKey
-    });
-} catch (err) {
-    console.error('[build] connection merge FAILED', {
-        connIndex,
-        childKey,
-        parentKey,
-        err,
-        childMesh,
-        parentMesh
-    });
-    throw err;
-}
-
-            console.log('[build] connection hole subtraction START', {
-    connIndex,
-    childKey,
-    parentKey
-});
-try {
-    mergedMesh = this.subtractHolesFromMesh(
-        mergedMesh,
-        [childMesh.userData.link, parentMesh.userData.link],
-    );
-    console.log('[build] connection hole subtraction OK', {
-        connIndex,
-        childKey,
-        parentKey
-    });
-} catch (err) {
-    console.error('[build] connection hole subtraction FAILED', {
-        connIndex,
-        childKey,
-        parentKey,
-        err,
-        links: [childMesh.userData.link, parentMesh.userData.link]
-    });
-    throw err;
-}
-
-            mergedMesh.userData.mergedConnection = {
-                connectionIndex: connIndex,
-                fromBranch: childBranchIndex,
-                fromLink: childLinkIndex,
-                toBranch: parentBranchIndex,
-                toLink: parentLinkIndex
+        
+            if (meshesToMerge.length < 2) return;
+        
+            let mergedMesh;
+            try {
+                mergedMesh = this.mergeMeshes(meshesToMerge);
+                console.log('[build] grouped connection merge OK', {
+                    parentKey,
+                    childKeys: mergedChildren
+                });
+            } catch (err) {
+                console.error('[build] grouped connection merge FAILED', {
+                    parentKey,
+                    childKeys: mergedChildren,
+                    err
+                });
+                throw err;
+            }
+        
+            try {
+                mergedMesh = this.subtractHolesFromMesh(
+                    mergedMesh,
+                    linksForHoles
+                );
+                console.log('[build] grouped connection hole subtraction OK', {
+                    parentKey,
+                    childKeys: mergedChildren
+                });
+            } catch (err) {
+                console.error('[build] grouped connection hole subtraction FAILED', {
+                    parentKey,
+                    childKeys: mergedChildren,
+                    err
+                });
+                throw err;
+            }
+        
+            mergedMesh.userData.mergedConnectionGroup = {
+                parentKey,
+                childKeys: mergedChildren
             };
-
+        
             finalMeshes.push(mergedMesh);
-
-            consumedKeys.add(childKey);
+        
             consumedKeys.add(parentKey);
+            mergedChildren.forEach(key => consumedKeys.add(key));
         });
 
         // 3) Add all unmerged meshes, subtracting their own hole
@@ -667,12 +634,14 @@ try {
 
             console.log(
                 `#${i}`,
-                d.mergedConnection
-                    ? `MERGED: B${d.mergedConnection.fromBranch}-L${d.mergedConnection.fromLink} <-> B${d.mergedConnection.toBranch}-L${d.mergedConnection.toLink}`
-                    : `SINGLE: B${d.branchIndex}-L${d.linkIndex}`
+                d.mergedConnectionGroup
+                ? `MERGED GROUP: parent ${d.mergedConnectionGroup.parentKey} children ${d.mergedConnectionGroup.childKeys.join(', ')}`
+                    : d.mergedConnection
+                        ? `MERGED: B${d.mergedConnection.fromBranch}-L${d.mergedConnection.fromLink} <-> B${d.mergedConnection.toBranch}-L${d.mergedConnection.toLink}`
+                        : `SINGLE: B${d.branchIndex}-L${d.linkIndex}`
             );
         });
-
+        
         if (fitView || !this.view.hasFittedOnce) {
             this.view.fitCameraToObject(this.group);
             this.view.hasFittedOnce = true;
