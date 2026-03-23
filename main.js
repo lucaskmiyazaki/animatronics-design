@@ -414,7 +414,7 @@ function createChainFromSkeleton(diameter = 20) {
 
     if (!useSkeleton.points || useSkeleton.points.length < 2) return [];
 
-    chain.buildFromSkeleton(useSkeleton, diameter);
+    chain.buildFromSkeleton(useSkeleton);
     redrawAll();
 
     return chain.getLinks();

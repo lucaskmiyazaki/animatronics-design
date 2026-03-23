@@ -10,6 +10,8 @@ const capThickness = 10;
 const joinEps = 0.5;
 const holeRadiusEps = 0.2;
 const holeDepthEps = 10.0;
+const linkDiameter = 20;
+const holeSize = linkDiameter * 0.5;
 
 class Chain3DView {
     constructor(sharedView) {
@@ -107,7 +109,7 @@ class Chain3DView {
         const topNormal = this.vec3(link.getTopNormal()).normalize();
 
         const axis = topCenter.clone().sub(bottomCenter).normalize();
-        const size = link.diameter;
+        const size = linkDiameter;
 
         const bottomCorners = this.getSquareCorners(bottomCenter, bottomNormal, axis, size);
         const rawTopCorners = this.getSquareCorners(topCenter, topNormal, axis, size);
@@ -304,7 +306,7 @@ class Chain3DView {
         return g;
     }
 
-    createHolePrismForLink(link, holeDiameterRatio = 0.2) {
+    createHolePrismForLink(link) {
         const bottomCenter = this.vec3(link.getBottomCenter());
         const topCenter = this.vec3(link.getTopCenter());
 
@@ -312,8 +314,6 @@ class Chain3DView {
         const height = axis.length() + holeDepthEps; // Add a small offset to ensure the hole extends slightly beyond the link
 
         if (height < 1e-8) return null;
-
-        const holeSize = link.diameter * holeDiameterRatio;
 
         const geometry = new THREE.BoxGeometry(
             holeSize,
@@ -357,11 +357,11 @@ class Chain3DView {
         return clone;
     }
 
-    subtractHolesFromMesh(mesh, links, holeDiameterRatio = 0.2) {
+    subtractHolesFromMesh(mesh, links) {
         let result = this.prepareMeshForCSG(mesh);
 
         links.forEach(link => {
-            const hole = this.createHolePrismForLink(link, holeDiameterRatio);
+            const hole = this.createHolePrismForLink(link);
             if (!hole) return;
 
             result = CSG.subtract(result, hole);
@@ -455,7 +455,7 @@ class Chain3DView {
             if (!branch || !branch.points || branch.points.length < 2) return;
 
             const tempChain = new Chain();
-            tempChain.buildFromSkeleton(branch, diameter);
+            tempChain.buildFromSkeleton(branch);
 
             const links = tempChain.getLinks();
 
@@ -467,28 +467,34 @@ class Chain3DView {
 
                 const startPoint = branch.points[linkIndex];
                 const startDiameter = startPoint?.diameter ?? diameter;
-                const startCylinder = this.createPointCapCylinder(
-                    link,
-                    startDiameter,
-                    capThickness
-                );
 
-                if (startCylinder) {
-                    parts.push(startCylinder);
+                if (startDiameter > linkDiameter) {
+                    const startCylinder = this.createPointCapCylinder(
+                        link,
+                        startDiameter,
+                        capThickness
+                    );
+                
+                    if (startCylinder) {
+                        parts.push(startCylinder);
+                    }
                 }
 
                 const isLastLink = linkIndex === links.length - 1;
                 if (isLastLink) {
                     const endPoint = branch.points[linkIndex + 1];
                     const endDiameter = endPoint?.diameter ?? diameter;
-                    const endCylinder = this.createEndPointCapCylinder(
-                        link,
-                        endDiameter,
-                        capThickness
-                    );
-
-                    if (endCylinder) {
-                        parts.push(endCylinder);
+                
+                    if (endDiameter > linkDiameter) {
+                        const endCylinder = this.createEndPointCapCylinder(
+                            link,
+                            endDiameter,
+                            capThickness
+                        );
+                    
+                        if (endCylinder) {
+                            parts.push(endCylinder);
+                        }
                     }
                 }
 
@@ -564,7 +570,6 @@ console.log('[connection debug] child link', {
     topCenter: childTopCenter,
     bottomNormal: childBottomNormal,
     topNormal: childTopNormal,
-    diameter: childLink.diameter
 });
 
 console.log('[connection debug] parent link', {
@@ -572,7 +577,6 @@ console.log('[connection debug] parent link', {
     topCenter: parentTopCenter,
     bottomNormal: parentBottomNormal,
     topNormal: parentTopNormal,
-    diameter: parentLink.diameter
 });
 
 console.log('[connection debug] angleDeg', angleDeg);
@@ -605,7 +609,6 @@ try {
     mergedMesh = this.subtractHolesFromMesh(
         mergedMesh,
         [childMesh.userData.link, parentMesh.userData.link],
-        0.2
     );
     console.log('[build] connection hole subtraction OK', {
         connIndex,
@@ -645,7 +648,6 @@ try {
                 const holedMesh = this.subtractHolesFromMesh(
                     mesh,
                     [mesh.userData.link],
-                    0.2
                 );
 
                 holedMesh.userData = { ...mesh.userData };

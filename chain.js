@@ -1,8 +1,6 @@
 class Link {
-    constructor(length, diameter, normal1, normal2) {
+    constructor(length, normal1, normal2) {
         this.length = length;
-        this.diameter = diameter;
-        this.radius = diameter / 2;
 
         this.position = { x: 0, y: 0, z: 0 };
         this.rotation = { x: 0, y: 0, z: 0 };
@@ -195,7 +193,7 @@ class Link {
         return { x: x3, y: y3, z: z3 };
     }
 
-    static fromFourPoints(P0, P1, P2, P3, diameter) {
+    static fromFourPoints(P0, P1, P2, P3) {
         const axis = Link.subtract(P2, P1);
         const length = Link.magnitude(axis);
         
@@ -256,84 +254,11 @@ class Link {
             }
         }
     
-        const link = new Link(length, diameter, normal1, normal2);
+        const link = new Link(length, normal1, normal2);
         link.setPosition(P1.x, P1.y, P1.z);
         link.setRotation(rotation.x, rotation.y, rotation.z);
     
         return link;
-    }
-
-    getXYProjection() {
-        const bottom3D = this.getBottomCenter();
-        const top3D = this.getTopCenter();
-
-        const bottomCenter = { x: bottom3D.x, y: bottom3D.y };
-        const topCenter = { x: top3D.x, y: top3D.y };
-
-        const axis2D = this.sub2D(topCenter, bottomCenter);
-        const axisDir = this.normalize2D(axis2D);
-        const offsetDir = this.perpendicular2D(axisDir);
-
-        const halfThickness = this.diameter / 2;
-
-        const bottomNormal2D = this.normalize2D({
-            x: this.getBottomNormal().x,
-            y: this.getBottomNormal().y
-        });
-
-        const topNormal2D = this.normalize2D({
-            x: this.getTopNormal().x,
-            y: this.getTopNormal().y
-        });
-
-        // side lines are perpendicular to normals
-        const bottomSideDir = this.perpendicular2D(bottomNormal2D);
-        const topSideDir = this.perpendicular2D(topNormal2D);
-
-        // upper and lower rails
-        const upperRailPoint = this.add2D(
-            bottomCenter,
-            this.mul2D(offsetDir, halfThickness)
-        );
-
-        const lowerRailPoint = this.add2D(
-            bottomCenter,
-            this.mul2D(offsetDir, -halfThickness)
-        );
-
-        const upperRailDir = axisDir;
-        const lowerRailDir = axisDir;
-
-        // 4 intersections
-        const p1 = this.intersectLines(
-            bottomCenter,
-            bottomSideDir,
-            upperRailPoint,
-            upperRailDir
-        );
-
-        const p2 = this.intersectLines(
-            topCenter,
-            topSideDir,
-            upperRailPoint,
-            upperRailDir
-        );
-
-        const p3 = this.intersectLines(
-            topCenter,
-            topSideDir,
-            lowerRailPoint,
-            lowerRailDir
-        );
-
-        const p4 = this.intersectLines(
-            bottomCenter,
-            bottomSideDir,
-            lowerRailPoint,
-            lowerRailDir
-        );
-
-        return [p1, p2, p3, p4];
     }
 }
 
@@ -373,7 +298,7 @@ class Chain {
             const P2 = Chain.pointTo3D(pts[i + 1]);
             const P3 = i + 2 < pts.length ? Chain.pointTo3D(pts[i + 2]) : null;
 
-            const link = Link.fromFourPoints(P0, P1, P2, P3, diameter);
+            const link = Link.fromFourPoints(P0, P1, P2, P3);
 
             if (link) {
                 this.links.push(link);
