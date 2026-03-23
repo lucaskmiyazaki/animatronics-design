@@ -20,13 +20,17 @@ class Chain3DView {
         this.meshes = [];
     }
 
+    vec3(p) {
+        return new THREE.Vector3(
+            p.x,
+            -p.y,
+            p.z ?? 0
+        );
+    }
+
     clearChain() {
         this.view.clearGroup(this.group);
         this.meshes = [];
-    }
-
-    vec3(p) {
-        return new THREE.Vector3(p.x, p.y, p.z ?? 0);
     }
 
     buildSquareBasis(normal, axis) {
@@ -641,7 +645,7 @@ class Chain3DView {
                         : `SINGLE: B${d.branchIndex}-L${d.linkIndex}`
             );
         });
-        
+
         if (fitView || !this.view.hasFittedOnce) {
             this.view.fitCameraToObject(this.group);
             this.view.hasFittedOnce = true;
