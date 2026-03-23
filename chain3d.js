@@ -396,7 +396,8 @@ class Chain3DView {
         const inwardDir = topCenter.clone().sub(bottomCenter).normalize();
         const sign = bottomNormal.dot(inwardDir) >= 0 ? 1 : -1;
 
-        const inwardOffset = bottomNormal.clone().multiplyScalar(sign * thickness * 0.5);
+        const joinEps = 0.5;
+        const inwardOffset = bottomNormal.clone().multiplyScalar(sign * (thickness * 0.5 + joinEps));
         cylinder.position.copy(bottomCenter).add(inwardOffset);
 
         cylinder.updateMatrixWorld(true);
@@ -427,14 +428,15 @@ class Chain3DView {
         const inwardDir = bottomCenter.clone().sub(topCenter).normalize();
         const sign = topNormal.dot(inwardDir) >= 0 ? 1 : -1;
 
-        const inwardOffset = topNormal.clone().multiplyScalar(sign * thickness * 0.5);
+        const joinEps = 0.5;
+        const inwardOffset = topNormal.clone().multiplyScalar(sign * (thickness * 0.5 + joinEps));
         cylinder.position.copy(topCenter).add(inwardOffset);
 
         cylinder.updateMatrixWorld(true);
         return cylinder;
     }
 
-        drawChainsForSkeleton(skeleton, diameter = 20, options = {}) {
+    drawChainsForSkeleton(skeleton, diameter = 20, options = {}) {
         const { fitView = false } = options;
 
         this.clearChain();
@@ -445,6 +447,9 @@ class Chain3DView {
         const consumedKeys = new Set();
         const finalMeshes = [];
         const capThickness = 10;
+        const joinEps = 0.5;
+        const holeRadiusEps = 0.2;
+        const holeDepthEps = 1.0;
 
         // 1) Build each link mesh already merged with its point cap cylinder(s)
         skeleton.branches.forEach((branch, branchIndex) => {
