@@ -20,6 +20,7 @@ let currentFrameIndex = 0;
 
 let hoveredPoint = null;
 let hoveredLine = null;
+let hoveredBranchIndex = -1;
 let draggedPoint = null;
 // set to the draggedPoint value at last mousedown; used to suppress click-on-line when editing a point
 let mouseDownDraggedPoint = null;
@@ -423,19 +424,14 @@ canvas.addEventListener('click', (e) => {
     const skeleton = ensureCurrentSkeleton();
     const { x, y } = getCanvasMousePosition(e);
 
-    // If the last mousedown targeted a point, suppress click-on-line behavior when editing a point
     if (mouseDownDraggedPoint) {
-        // clear the flag for next interactions
         mouseDownDraggedPoint = null;
-        // If we were editing a point, don't treat this click as a line-click to create a branch
         if (mode === 'edit') return;
     }
 
-    // If in Create mode: add a point to the current branch (backwards-compatible)
     if (mode === 'create') {
         if (!skeleton) return;
 
-        // Backwards compatibility: if skeleton has flat API
         if (skeleton && typeof skeleton.addPoint === 'function' && Array.isArray(skeleton.points)) {
             const newPoint = skeleton.addPoint(x, y, 0);
             if (skeleton.points && skeleton.points.length > 1) {
@@ -460,13 +456,35 @@ canvas.addEventListener('click', (e) => {
         return;
     }
 
-    // If in Edit mode and a line is clicked, create a new branch starting at the projected point
+    if (mode === 'mirror') {
+        if (!skeleton) return;
+
+        const line = getLineAt(x, y);
+        if (!line) return;
+
+        const branchIndex = findBranchIndexForLine(line);
+        if (branchIndex === -1) return;
+
+        if (typeof skeleton.addMirrorBranch === 'function') {
+            const mirrorBranchIndex = skeleton.addMirrorBranch(branchIndex);
+            console.log('[mirror] created mirror branch', {
+                sourceBranch: branchIndex,
+                mirrorBranch: mirrorBranchIndex
+            });
+        } else {
+            console.warn('[mirror] skeleton.addMirrorBranch(branchIndex) is not implemented yet');
+        }
+
+        chain.clear();
+        redrawAll();
+        return;
+    }
+
     if (mode === 'edit') {
         if (!skeleton) return;
         const line = getLineAt(x, y);
         if (!line) return;
 
-        // Find which branch owns this line
         let lineBranchIndex = -1;
         let lineIndexInBranch = -1;
         for (let i = 0; i < skeleton.branches.length; i++) {
@@ -478,18 +496,15 @@ canvas.addEventListener('click', (e) => {
             }
         }
 
-        // project click to the segment and create a new branch with that starting point
         const proj = projectPointToSegment(x, y, line.start.x, line.start.y, line.end.x, line.end.y);
         const newBranch = skeleton.addBranch();
         newBranch.addPoint(proj.x, proj.y, 0);
 
-        // Connect the new branch to the line
         const newBranchIndex = skeleton.branches.indexOf(newBranch);
         if (lineBranchIndex !== -1 && lineIndexInBranch !== -1) {
             skeleton.connectFirstPointToLine(newBranchIndex, lineBranchIndex, lineIndexInBranch);
         }
 
-        // switch to the new branch and enter create mode
         currentBranch = newBranchIndex;
         mode = 'create';
         chain.clear();
@@ -554,6 +569,19 @@ canvas.addEventListener('mousemove', (e) => {
     const { x: mouseX, y: mouseY } = getCanvasMousePosition(e);
 
     hoveredPoint = getPointAt(mouseX, mouseY);
+
+    if (mode === 'mirror') {
+        const line = getLineAt(mouseX, mouseY);
+        
+        if (line) {
+            hoveredBranchIndex = findBranchIndexForLine(line);
+        } else {
+            hoveredBranchIndex = -1;
+        }
+
+        redrawAll();
+        return;
+    }
 
     if (draggedPoint) {
         const skeleton = getCurrentSkeleton();
@@ -630,7 +658,7 @@ canvas.addEventListener('mousemove', (e) => {
                 console.log('[mesh] updating diameter:', newDiameter);
 
                 generateMeshPolygonsForSkeleton(skeleton);
-            }
+            } 
         }
     }
 
@@ -657,6 +685,7 @@ function toggleMode() {
     if (mode === 'create') mode = 'edit';
     else if (mode === 'edit') mode = 'move';
     else if (mode === 'move') mode = 'mesh';
+    else if (mode === 'mesh') mode = 'mirror';
     else mode = 'create';
 
     draggedPoint = null;
@@ -668,6 +697,20 @@ function toggleMode() {
 
 function getMode() {
     return mode;
+}
+
+function findBranchIndexForLine(line) {
+    const skeleton = getCurrentSkeleton();
+    if (!skeleton || !line || !skeleton.branches) return -1;
+
+    for (let i = 0; i < skeleton.branches.length; i++) {
+        const branch = skeleton.branches[i];
+        if (branch && branch.lines && branch.lines.includes(line)) {
+            return i;
+        }
+    }
+
+    return -1;
 }
 
 function cloneSkeleton(sourceSkeleton) {

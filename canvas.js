@@ -65,12 +65,14 @@ function _distancePointToSegment(px, py, x1, y1, x2, y2) {
 function drawSkeleton(ctx, skeleton, hoveredPoint = null, pointRadius = 5, hoverRadius = 9) {
     if (!skeleton) return;
 
-    // determine whether we should highlight lines (edit or move mode)
     let highlightByMouse = false;
+    let mirrorMode = false;
+
     try {
-        if (typeof getMode === 'function') {
-            const m = getMode();
-            if (m === 'edit' || m === 'move') highlightByMouse = true;
+        if (window.appActions?.getMode) {
+            const m = window.appActions.getMode();
+            if (m === 'edit' || m === 'move' || m === 'mirror') highlightByMouse = true;
+            if (m === 'mirror') mirrorMode = true;
         }
     } catch (e) {}
 
@@ -97,6 +99,17 @@ function drawSkeleton(ctx, skeleton, hoveredPoint = null, pointRadius = 5, hover
         if (best && typeof hitRadius !== 'undefined' && bestDist <= hitRadius) hoveredLine = best;
     }
 
+    let hoveredBranchIndex = -1;
+
+    if (mirrorMode && hoveredLine && skeleton.branches) {
+        for (let i = 0; i < skeleton.branches.length; i++) {
+            if (skeleton.branches[i].lines.includes(hoveredLine)) {
+                hoveredBranchIndex = i;
+                break;
+            }
+        }
+    }
+
     // scale drawing sizes when in edit/move modes
     const lineWidthNormal = highlightByMouse ? 3 : 2;
     const lineWidthHover = highlightByMouse ? 8 : 6;
@@ -120,15 +133,34 @@ function drawSkeleton(ctx, skeleton, hoveredPoint = null, pointRadius = 5, hover
 
     // New structure: skeleton.branches (array of Branch)
     if (skeleton.branches) {
-        skeleton.branches.forEach(branch => {
+        skeleton.branches.forEach((branch, branchIndex) => {
+            const isHoveredBranch = mirrorMode && branchIndex === hoveredBranchIndex;
             branch.lines.forEach(line => {
-                const isHovered = hoveredLine === line;
-                drawLine(ctx, line.start, line.end, isHovered ? 'orange' : 'blue', isHovered ? lineWidthHover : lineWidthNormal);
+                const isHoveredLine = hoveredLine === line;
+            
+                const color = isHoveredBranch
+                    ? 'orange'
+                    : isHoveredLine
+                        ? 'orange'
+                        : 'blue';
+            
+                const width = isHoveredBranch
+                    ? lineWidthHover
+                    : isHoveredLine
+                        ? lineWidthHover
+                        : lineWidthNormal;
+            
+                drawLine(ctx, line.start, line.end, color, width);
             });
-
+        
             branch.points.forEach(point => {
-                const radius = point === hoveredPoint ? effectiveHoverRadius : effectivePointRadius;
-                drawPoint(ctx, point, radius, 'red');
+                const radius = point === hoveredPoint
+                    ? effectiveHoverRadius
+                    : effectivePointRadius;
+            
+                const color = isHoveredBranch ? 'orange' : 'red';
+            
+                drawPoint(ctx, point, radius, color);
             });
         });
 
